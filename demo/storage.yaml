@@ -1,0 +1,35 @@
+# storage.yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs              # keep the name — chart values don't need changing
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: Immediate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ds-files-pv
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+  hostPath:
+    path: /tmp/euro-office-shared/ds-files
+    type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ds-runtime-config-pv
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs
+  hostPath:
+    path: /tmp/euro-office-shared/ds-runtime-config
+    type: DirectoryOrCreate

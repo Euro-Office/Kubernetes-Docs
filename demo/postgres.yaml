@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pg-postgresql
+  namespace: euro-office
+type: Opaque
+stringData:
+  postgres-password: eurooffice
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pg-postgresql-data
+  namespace: euro-office
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pg-postgresql
+  namespace: euro-office
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate                         # important — RWO PVC can't coexist with rolling update
+  selector:
+    matchLabels:
+      app: pg-postgresql
+  template:
+    metadata:
+      labels:
+        app: pg-postgresql
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_USER
+          value: eurooffice
+        - name: POSTGRES_DB
+          value: eurooffice
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pg-postgresql
+              key: postgres-password
+        - name: PGDATA                     # subfolder avoids `lost+found` init issue
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "eurooffice", "-d", "eurooffice"]
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
+            cpu: 1000m
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: pg-postgresql-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-postgresql
+  namespace: euro-office
+spec:
+  selector:
+    app: pg-postgresql
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432

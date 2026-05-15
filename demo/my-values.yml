@@ -1,0 +1,55 @@
+
+# Skip the demo app
+example:
+  enabled: true
+  dsUrl: "http://localhost:8082/"
+  extraEnvVars:
+    - name: EXAMPLE_URL
+      value: "http://documentserver.euro-office.svc.cluster.local:8888/example"
+
+adminpanel:
+  ## adminpanel.enabled Enables Adminpanel installation
+  enabled: true
+
+# Use the official docs-utils for hook Jobs (no license needed for this one)
+# Leave install/upgrade/delete/rollback/grafanaDashboard.job defaults alone.
+
+# External services we just installed
+connections:
+  dbType: postgres
+  dbHost: pg-postgresql.euro-office.svc.cluster.local
+  dbPort: 5432
+  dbName: eurooffice
+  dbUser: eurooffice
+  dbPassword: eurooffice
+
+  redisConnectorName: ioredis
+  redisHost: redis-master.euro-office.svc.cluster.local
+  redisPort: 6379
+  redisPassword: redis
+
+  amqpType: rabbitmq
+  amqpHost: rabbit-rabbitmq.euro-office.svc.cluster.local
+  amqpPort: 5672
+  amqpUser: eurooffice
+  amqpPassword: rabbit
+  amqpProto: amqp
+
+# JWT — required for editing to work
+jwt:
+  enabled: true
+  secret: "local-dev-jwt-please-change-asap"
+
+# Smaller PVC for local
+persistence:
+  size: 2Gi
+
+images:
+  tag: latest
+
+requestFilteringAgent:
+  allowPrivateIPAddress: true
+
+log:
+
+  level: DEBUG
