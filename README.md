@@ -1,6 +1,6 @@
-# ONLYOFFICE Docs for Kubernetes
+# Euro-Office Docs for Kubernetes
 
-This repository contains a set of files to deploy ONLYOFFICE Docs into a Kubernetes cluster or OpenShift cluster.
+This repository contains a set of files to deploy Euro-Office Docs into a Kubernetes cluster or OpenShift cluster.
 
 ## Contents
 - [Requirements](#requirements)
@@ -17,41 +17,41 @@ This repository contains a set of files to deploy ONLYOFFICE Docs into a Kuberne
     + [6.3 Installing StatsD exporter](#63-installing-statsd-exporter)
   * [7. Make changes to Node-config configuration files](#7-make-changes-to-Node-config-configuration-files)
     + [7.1 Create a ConfigMap containing a json file](#71-create-a-configmap-containing-a-json-file)
-    + [7.2 Specify parameters when installing ONLYOFFICE Docs](#72-specify-parameters-when-installing-onlyoffice-docs)
+    + [7.2 Specify parameters when installing Euro-Office Docs](#72-specify-parameters-when-installing-euro-office-docs)
   * [8. Add custom Fonts](#8-add-custom-fonts)
   * [9. Add Plugins](#9-add-plugins)
   * [10. Add custom dictionaries](#10-add-custom-dictionaries)
   * [11. Change interface themes](#11-change-interface-themes)
     + [11.1 Create a ConfigMap containing a json file](#111-create-a-configmap-containing-a-json-file)
-    + [11.2 Specify parameters when installing ONLYOFFICE Docs](#112-specify-parameters-when-installing-onlyoffice-docs)
-  * [12. Connecting Amazon S3 bucket as a cache to ONLYOFFICE Helm Docs](#12-connecting-amazon-s3-bucket-as-a-cache-to-onlyoffice-helm-docs)
-- [Deploy ONLYOFFICE Docs](#deploy-onlyoffice-docs)
-  * [1. Deploy the ONLYOFFICE Docs license](#1-deploy-the-onlyoffice-docs-license)
+    + [11.2 Specify parameters when installing Euro-Office Docs](#112-specify-parameters-when-installing-euro-office-docs)
+  * [12. Connecting Amazon S3 bucket as a cache to Euro-Office Helm Docs](#12-connecting-amazon-s3-bucket-as-a-cache-to-euro-office-helm-docs)
+- [Deploy Euro-Office Docs](#deploy-euro-office-docs)
+  * [1. Deploy the Euro-Office Docs license](#1-deploy-the-euro-office-docs-license)
     + [1.1 Create secret](#11-create-secret)
-    + [1.2 Specify parameters when installing ONLYOFFICE Docs](#12-specify-parameters-when-installing-onlyoffice-docs)
-  * [2. Deploy ONLYOFFICE Docs](#2-deploy-onlyoffice-docs)
-  * [3. Uninstall ONLYOFFICE Docs](#3-uninstall-onlyoffice-docs)
+    + [1.2 Specify parameters when installing Euro-Office Docs](#12-specify-parameters-when-installing-euro-office-docs)
+  * [2. Deploy Euro-Office Docs](#2-deploy-euro-office-docs)
+  * [3. Uninstall Euro-Office Docs](#3-uninstall-euro-office-docs)
   * [4. Parameters](#4-parameters)
   * [5. Configuration and installation details](#5-configuration-and-installation-details)
   * [5.1 Example deployment (optional)](#51-example-deployment-optional)
   * [5.2 Metrics deployment (optional)](#52-metrics-deployment-optional)
-  * [5.3 Expose ONLYOFFICE Docs](#53-expose-onlyoffice-docs)
-    + [5.3.1 Expose ONLYOFFICE Docs via Service (HTTP Only)](#531-expose-onlyoffice-docs-via-service-http-only)
-    + [5.3.2 Expose ONLYOFFICE Docs via Ingress](#532-expose-onlyoffice-docs-via-ingress)
+  * [5.3 Expose Euro-Office Docs](#53-expose-euro-office-docs)
+    + [5.3.1 Expose Euro-Office Docs via Service (HTTP Only)](#531-expose-euro-office-docs-via-service-http-only)
+    + [5.3.2 Expose Euro-Office Docs via Ingress](#532-expose-euro-office-docs-via-ingress)
     + [5.3.2.1 Installing the Kubernetes Nginx Ingress Controller](#5321-installing-the-kubernetes-nginx-ingress-controller)
-    + [5.3.2.2 Expose ONLYOFFICE Docs via HTTP](#5322-expose-onlyoffice-docs-via-http)
-    + [5.3.2.3 Expose ONLYOFFICE Docs via HTTPS](#5323-expose-onlyoffice-docs-via-https)
-    + [5.3.2.4 Expose ONLYOFFICE Docs via HTTPS using the Let's Encrypt certificate](#5324-expose-onlyoffice-docs-via-https-using-the-lets-encrypt-certificate)
-    + [5.3.2.5 Expose ONLYOFFICE Docs on a virtual path](#5325-expose-onlyoffice-docs-on-a-virtual-path)
-    + [5.3.3 Expose ONLYOFFICE Docs via route in OpenShift](#533-expose-onlyoffice-docs-via-route-in-openshift)
+    + [5.3.2.2 Expose Euro-Office Docs via HTTP](#5322-expose-euro-office-docs-via-http)
+    + [5.3.2.3 Expose Euro-Office Docs via HTTPS](#5323-expose-euro-office-docs-via-https)
+    + [5.3.2.4 Expose Euro-Office Docs via HTTPS using the Let's Encrypt certificate](#5324-expose-euro-office-docs-via-https-using-the-lets-encrypt-certificate)
+    + [5.3.2.5 Expose Euro-Office Docs on a virtual path](#5325-expose-euro-office-docs-on-a-virtual-path)
+    + [5.3.3 Expose Euro-Office Docs via route in OpenShift](#533-expose-euro-office-docs-via-route-in-openshift)
   * [5.4 Admin Panel deployment (optional)](#54-admin-panel-deployment-optional)
-  * [6. Scale ONLYOFFICE Docs (optional)](#6-scale-onlyoffice-docs-optional) 
+  * [6. Scale Euro-Office Docs (optional)](#6-scale-euro-office-docs-optional) 
       + [6.1 Horizontal Pod Autoscaling](#61-horizontal-pod-autoscaling)
       + [6.2 Manual scaling](#62-manual-scaling) 
-  * [7. Update ONLYOFFICE Docs](#7-update-onlyoffice-docs)
-  * [8. Shutdown ONLYOFFICE Docs (optional)](#8-shutdown-onlyoffice-docs-optional)
-  * [9. Update ONLYOFFICE Docs license (optional)](#9-update-onlyoffice-docs-license-optional)
-  * [10. ONLYOFFICE Docs installation test (optional)](#10-onlyoffice-docs-installation-test-optional)
+  * [7. Update Euro-Office Docs](#7-update-euro-office-docs)
+  * [8. Shutdown Euro-Office Docs (optional)](#8-shutdown-euro-office-docs-optional)
+  * [9. Update Euro-Office Docs license (optional)](#9-update-euro-office-docs-license-optional)
+  * [10. Euro-Office Docs installation test (optional)](#10-euro-office-docs-installation-test-optional)
   * [11. Run Jobs in a private k8s cluster (optional)](#11-run-jobs-in-a-private-k8s-cluster-optional)
   * [12. Access to the info page (optional)](#12-access-to-the-info-page-optional)
 - [Using Grafana to visualize metrics (optional)](#using-grafana-to-visualize-metrics-optional)
@@ -87,13 +87,13 @@ This repository contains a set of files to deploy ONLYOFFICE Docs into a Kuberne
 $ helm repo add bitnami https://charts.bitnami.com/bitnami
 $ helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
 $ helm repo add nfs-server-provisioner https://kubernetes-sigs.github.io/nfs-ganesha-server-and-external-provisioner
-$ helm repo add onlyoffice https://download.onlyoffice.com/charts/stable
+$ helm repo add euro-office https://download.euro-office.com/charts/stable
 $ helm repo update
 ```
 
 ### 2. Install Persistent Storage
 
-*If you want to use [Amazon S3 as a cache](#12-connecting-amazon-s3-bucket-as-a-cache-to-onlyoffice-helm-docs), please skip this step.*
+*If you want to use [Amazon S3 as a cache](#12-connecting-amazon-s3-bucket-as-a-cache-to-euro-office-helm-docs), please skip this step.*
 
 Install NFS Server Provisioner
 
@@ -121,10 +121,10 @@ See more details about installing NFS Server Provisioner via Helm [here](https:/
 
 Configure a Persistent Volume Claim
 
-Note: The default `nfs` Persistent Volume Claim is 8Gi. You can change it in the [values.yaml](values.yaml) file in the `persistence.storageClass` and `persistence.size` section. It should be less than `PERSISTENT_SIZE` at least by about 5%. It's recommended to use 8Gi or more for persistent storage for every 100 active users of ONLYOFFICE Docs.
+Note: The default `nfs` Persistent Volume Claim is 8Gi. You can change it in the [values.yaml](values.yaml) file in the `persistence.storageClass` and `persistence.size` section. It should be less than `PERSISTENT_SIZE` at least by about 5%. It's recommended to use 8Gi or more for persistent storage for every 100 active users of Euro-Office Docs.
 
 *The PersistentVolume type to be used for PVC placement must support Access Mode [ReadWriteMany](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#access-modes).*
-*Also, PersistentVolume must have as the owner the user from whom the ONLYOFFICE Docs will be started. By default it is `ds` (101:101).*
+*Also, PersistentVolume must have as the owner the user from whom the Euro-Office Docs will be started. By default it is `ds` (101:101).*
 
 Note: If you want to enable `WOPI`, please set the parameter `wopi.enabled=true`. In this case Persistent Storage must be connected to the cluster nodes with the disabled caching attributes for the mounted directory for the clients. For NFS Server Provisioner it can be achieved by adding `noac` option to the parameter `storageClass.mountOptions`. Please find more information [here](https://github.com/kubernetes-sigs/nfs-ganesha-server-and-external-provisioner/blob/master/charts/nfs-server-provisioner/values.yaml#L83).
 ### 3. Deploy RabbitMQ
@@ -194,8 +194,8 @@ To install MySQL to your cluster, run the following command:
 
 ```
 $ helm install mysql --version 14.0.3 bitnami/mysql \
-  --set auth.database=onlyoffice \
-  --set auth.username=onlyoffice \
+  --set auth.database=euro-office \
+  --set auth.username=euro-office \
   --set primary.persistence.storageClass=PERSISTENT_STORAGE_CLASS \
   --set primary.persistence.size=PERSISTENT_SIZE \
   --set primary.resourcesPreset=none \
@@ -209,7 +209,7 @@ See more details about installing MySQL via Helm [here](https://github.com/bitna
 
 Here `PERSISTENT_SIZE` is a size for the Database persistent volume. For example: `8Gi`.
 
-It's recommended to use at least 2Gi of persistent storage for every 100 active users of ONLYOFFICE Docs.
+It's recommended to use at least 2Gi of persistent storage for every 100 active users of Euro-Office Docs.
 
 Note: Set the `metrics.enabled=true` to enable exposing Database metrics to be gathered by Prometheus. Also add the following parameters: `metrics.image.repository=bitnamilegacy/mysqld-exporter` and `metrics.image.tag=0.17.2-debian-12-r16`.
 
@@ -230,7 +230,7 @@ $ helm repo update
 To install Prometheus to your cluster, run the following command:
 
 ```bash
-$ helm install prometheus -f https://raw.githubusercontent.com/ONLYOFFICE/Kubernetes-Docs/master/sources/extraScrapeConfigs.yaml prometheus-community/prometheus \
+$ helm install prometheus -f https://raw.githubusercontent.com/Euro-Office/Kubernetes-Docs/master/sources/extraScrapeConfigs.yaml prometheus-community/prometheus \
   --set server.global.scrape_interval=1m
 ```
 
@@ -251,7 +251,7 @@ $ helm install statsd-exporter prometheus-community/prometheus-statsd-exporter \
 
 See more details about installing Prometheus StatsD exporter via Helm [here](https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-statsd-exporter).
 
-To allow the StatsD metrics in ONLYOFFICE Docs, follow step [5.2](#52-metrics-deployment-optional)
+To allow the StatsD metrics in Euro-Office Docs, follow step [5.2](#52-metrics-deployment-optional)
 
 ### 7. Make changes to Node-config configuration files
 
@@ -268,25 +268,25 @@ $ kubectl create configmap local-config \
 
 Note: Any name can be used instead of `local-config`.
 
-#### 7.2 Specify parameters when installing ONLYOFFICE Docs
+#### 7.2 Specify parameters when installing Euro-Office Docs
 
-When installing ONLYOFFICE Docs, specify the `extraConf.configMap=local-config` and `extraConf.filename=local.json` parameters
+When installing Euro-Office Docs, specify the `extraConf.configMap=local-config` and `extraConf.filename=local.json` parameters
 
-Note: If you need to add a configuration file after the ONLYOFFICE Docs is already installed, you need to execute step [7.1](#71-create-a-configmap-containing-a-json-file) 
-and then run the `helm upgrade documentserver onlyoffice/docs --set extraConf.configMap=local-config --set extraConf.filename=local.json --no-hooks` command or 
-`helm upgrade documentserver -f ./values.yaml onlyoffice/docs --no-hooks` if the parameters are specified in the `values.yaml` file.
+Note: If you need to add a configuration file after the Euro-Office Docs is already installed, you need to execute step [7.1](#71-create-a-configmap-containing-a-json-file) 
+and then run the `helm upgrade documentserver euro-office/docs --set extraConf.configMap=local-config --set extraConf.filename=local.json --no-hooks` command or 
+`helm upgrade documentserver -f ./values.yaml euro-office/docs --no-hooks` if the parameters are specified in the `values.yaml` file.
 
 ### 8. Add custom Fonts
 
 *This step is optional. You can skip step [#8](#8-add-custom-fonts) entirely if you don't need to add your fonts*
 
-In order to add fonts to ONLYOFFICE Docs, you need to follow a number of steps. See more details [here](./CUSTOM_RESOURCES.md#adding-custom-fonts).
+In order to add fonts to Euro-Office Docs, you need to follow a number of steps. See more details [here](./CUSTOM_RESOURCES.md#adding-custom-fonts).
 
 ### 9. Add Plugins
 
 *This step is optional. You can skip step [#9](#9-add-plugins) entirely if you don't need to add plugins*
 
-In order to add plugins to ONLYOFFICE Docs, you need to follow a number of steps. See more details [here](./CUSTOM_RESOURCES.md#adding-custom-plugins).
+In order to add plugins to Euro-Office Docs, you need to follow a number of steps. See more details [here](./CUSTOM_RESOURCES.md#adding-custom-plugins).
 
 You can also configure the [list of default plugins](./CUSTOM_RESOURCES.md#disabling-default-plugins) displayed or remove them [completely](./CUSTOM_RESOURCES.md#completely-disable-plugins-directory).
 
@@ -294,7 +294,7 @@ You can also configure the [list of default plugins](./CUSTOM_RESOURCES.md#disab
 
 *This step is optional. You can skip step [#10](#10-add-custom-dictionaries) entirely if you don't need to add your dictionaries*
 
-In order to add your custom dictionaries to ONLYOFFICE Docs, you need to follow a number of steps. See more details [here](./CUSTOM_RESOURCES.md#adding-custom-dictionaries).
+In order to add your custom dictionaries to Euro-Office Docs, you need to follow a number of steps. See more details [here](./CUSTOM_RESOURCES.md#adding-custom-dictionaries).
 
 ### 11. Change interface themes
 
@@ -311,24 +311,24 @@ $ kubectl create configmap custom-themes \
 
 Note: Instead of `custom-themes` and `custom-themes.json` you can use any other names.
 
-#### 11.2 Specify parameters when installing ONLYOFFICE Docs
+#### 11.2 Specify parameters when installing Euro-Office Docs
 
-When installing ONLYOFFICE Docs, specify the `extraThemes.configMap=custom-themes` and `extraThemes.filename=custom-themes.json` parameters.
+When installing Euro-Office Docs, specify the `extraThemes.configMap=custom-themes` and `extraThemes.filename=custom-themes.json` parameters.
 
-Note: If you need to add interface themes after the ONLYOFFICE Docs is already installed, you need to execute step [11.1](#111-create-a-configmap-containing-a-json-file)
-and then run the `helm upgrade documentserver onlyoffice/docs --set extraThemes.configMap=custom-themes --set extraThemes.filename=custom-themes.json --no-hooks` command or
-`helm upgrade documentserver -f ./values.yaml onlyoffice/docs --no-hooks` if the parameters are specified in the `values.yaml` file.
+Note: If you need to add interface themes after the Euro-Office Docs is already installed, you need to execute step [11.1](#111-create-a-configmap-containing-a-json-file)
+and then run the `helm upgrade documentserver euro-office/docs --set extraThemes.configMap=custom-themes --set extraThemes.filename=custom-themes.json --no-hooks` command or
+`helm upgrade documentserver -f ./values.yaml euro-office/docs --no-hooks` if the parameters are specified in the `values.yaml` file.
 
-### 12. Connecting Amazon S3 bucket as a cache to ONLYOFFICE Helm Docs
-In order to connect Amazon S3 bucket as a cache, you need to [create](#7-make-changes-to-node-config-configuration-files) a configuration file or edit the existing one in accordance with [this guide](https://helpcenter.onlyoffice.com/ru/installation/docs-connect-amazon.aspx) and change the value of the parameter `persistence.storageS3` to `true`. 
+### 12. Connecting Amazon S3 bucket as a cache to Euro-Office Helm Docs
+In order to connect Amazon S3 bucket as a cache, you need to [create](#7-make-changes-to-node-config-configuration-files) a configuration file or edit the existing one in accordance with [this guide](https://helpcenter.euro-office.com/ru/installation/docs-connect-amazon.aspx) and change the value of the parameter `persistence.storageS3` to `true`. 
 
-## Deploy ONLYOFFICE Docs
+## Deploy Euro-Office Docs
 
-### 1. Deploy the ONLYOFFICE Docs license
+### 1. Deploy the Euro-Office Docs license
 
 #### 1.1. Create secret
 
-If you have a valid ONLYOFFICE Docs license, create a secret `license` from the file:
+If you have a valid Euro-Office Docs license, create a secret `license` from the file:
 
 ```
 $ kubectl create secret generic [SECRET_LICENSE_NAME] --from-file=path/to/license.lic
@@ -338,31 +338,31 @@ $ kubectl create secret generic [SECRET_LICENSE_NAME] --from-file=path/to/licens
 
 Note: The source license file name should be 'license.lic' because this name would be used as a field in the created secret.
 
-Note: If the installation is performed without creating a secret with the existing license file, an empty secret `license` will be automatically created. For information on how to update an existing secret with a license, see [here](#9-update-onlyoffice-docs-license-optional).
+Note: If the installation is performed without creating a secret with the existing license file, an empty secret `license` will be automatically created. For information on how to update an existing secret with a license, see [here](#9-update-euro-office-docs-license-optional).
 
-#### 1.2. Specify parameters when installing ONLYOFFICE Docs
+#### 1.2. Specify parameters when installing Euro-Office Docs
 
-When installing ONLYOFFICE Docs, specify the `license.existingSecret=[SECRET_LICENSE_NAME]` parameter.
+When installing Euro-Office Docs, specify the `license.existingSecret=[SECRET_LICENSE_NAME]` parameter.
 
 ```
-$ helm install documentserver onlyoffice/docs --set license.existingSecret=[SECRET_LICENSE_NAME]
+$ helm install documentserver euro-office/docs --set license.existingSecret=[SECRET_LICENSE_NAME]
 ```
 
-Note: If you need to add license after the ONLYOFFICE Docs is already installed, you need to execute step [1.1](#11-create-secret) and then run the `helm upgrade documentserver onlyoffice/docs --set license.existingSecret=[SECRET_LICENSE_NAME] --no-hooks` command or `helm upgrade documentserver -f ./values.yaml onlyoffice/docs --no-hooks` if the parameters are specified in the `values.yaml` file.
+Note: If you need to add license after the Euro-Office Docs is already installed, you need to execute step [1.1](#11-create-secret) and then run the `helm upgrade documentserver euro-office/docs --set license.existingSecret=[SECRET_LICENSE_NAME] --no-hooks` command or `helm upgrade documentserver -f ./values.yaml euro-office/docs --no-hooks` if the parameters are specified in the `values.yaml` file.
 
-### 2. Deploy ONLYOFFICE Docs
+### 2. Deploy Euro-Office Docs
 
-To deploy ONLYOFFICE Docs with the release name `documentserver`:
+To deploy Euro-Office Docs with the release name `documentserver`:
 
 ```bash
-$ helm install documentserver onlyoffice/docs
+$ helm install documentserver euro-office/docs
 ```
 
-The command deploys ONLYOFFICE Docs on the Kubernetes cluster in the default configuration. The [Parameters](#4-parameters) section lists the parameters that can be configured during installation.
+The command deploys Euro-Office Docs on the Kubernetes cluster in the default configuration. The [Parameters](#4-parameters) section lists the parameters that can be configured during installation.
 
-Note: When installing ONLYOFFICE Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
+Note: When installing Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
 
-### 3. Uninstall ONLYOFFICE Docs
+### 3. Uninstall Euro-Office Docs
 
 To uninstall/delete the `documentserver` deployment:
 
@@ -370,16 +370,16 @@ To uninstall/delete the `documentserver` deployment:
 $ helm delete documentserver
 ```
 
-Executing the `helm delete` command launches hooks, which perform some preparatory actions before completely deleting the ONLYOFFICE Docs, which include stopping the server, cleaning up the used PVC and database tables.
+Executing the `helm delete` command launches hooks, which perform some preparatory actions before completely deleting the Euro-Office Docs, which include stopping the server, cleaning up the used PVC and database tables.
 The default hook execution time is 300s. The execution time can be changed using `--timeout [time]`, for example:
 
 ```bash
 $ helm delete documentserver --timeout 25m
 ```
 
-Note: When deleting ONLYOFFICE Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
+Note: When deleting Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
 
-If you want to delete the ONLYOFFICE Docs without any preparatory actions, run the following command:
+If you want to delete the Euro-Office Docs without any preparatory actions, run the following command:
 
 ```bash
 $ helm delete documentserver --no-hooks
@@ -426,8 +426,8 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `connections.amqpExistingSecret`                            | The name of existing secret to use for AMQP server passwords. Must contain the key specified in `connections.amqpSecretKeyName`                                                | `rabbitmq`                                                                                |
 | `persistence.existingClaim`                                 | Name of an existing PVC to use. If not specified, a PVC named "ds-files" will be created                                                                                       | `""`                                                                                      |
 | `persistence.annotations`                                   | Defines annotations that will be additionally added to "ds-files" PVC. If set to, it takes priority over the `commonAnnotations`                                               | `{}`                                                                                      |
-| `persistence.storageClass`                                  | PVC Storage Class for Onlyoffice Docs data and runtime config volumes                                                                                                          | `nfs`                                                                                     |
-| `persistence.size`                                          | PVC Storage Request for ONLYOFFICE Docs volume                                                                                                                                 | `8Gi`                                                                                     |
+| `persistence.storageClass`                                  | PVC Storage Class for Euro-Office Docs data and runtime config volumes                                                                                                          | `nfs`                                                                                     |
+| `persistence.size`                                          | PVC Storage Request for Euro-Office Docs volume                                                                                                                                 | `8Gi`                                                                                     |
 | `persistence.storageS3`                                     | Defines whether S3 will be used as cache storage. Set to `true` if you will use S3 as cache storage                                                                            | `false`                                                                                   |
 | `persistence.runtimeConfig.enabled`                         | Defines whether to use PVC and whether to mount it in containers                                                                                                               | `true`                                                                                    |
 | `persistence.runtimeConfig.existingClaim`                   | The name of the existing PVC used to store the runtime config. If not specified, a PVC named "ds-runtime-config" will be created                                               | `""`                                                                                      |
@@ -439,7 +439,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `persistence.buffer.annotations`                            | Defines annotations that will be additionally added to "ds-buffer" PVC. If set to, it takes priority over the `commonAnnotations`                                              | `{}`                                                                                      |
 | `persistence.buffer.size`                                   | PVC Storage Request for generated files volume                                                                                                                                 | `5Gi`                                                                                     |
 | `commonNameSuffix`                                          | The name that will be added to the name of all created resources as a suffix                                                                                                   | `""`                                                                                      |
-| `namespaceOverride`                                         | The name of the namespace in which Onlyoffice Docs will be deployed. If not set, the name will be taken from `.Release.Namespace`                                              | `""`                                                                                      |
+| `namespaceOverride`                                         | The name of the namespace in which Euro-Office Docs will be deployed. If not set, the name will be taken from `.Release.Namespace`                                              | `""`                                                                                      |
 | `commonLabels`                                              | Defines labels that will be additionally added to all the deployed resources. You can also use `tpl` as the value for the key                                                  | `{}`                                                                                      |
 | `commonMatchLabels`                                         | Defines stable labels that will be used in selector.matchLabels for all the deployed resources. Please use only immutable labels in this field                                 | `{}`                                                                                      |
 | `commonAnnotations`                                         | Defines annotations that will be additionally added to all the deployed resources. You can also use `tpl` as the value for the key. Some resources may override the values specified here with their own | `{}`                                                            |
@@ -456,7 +456,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `wopi.keys.generation`                                      | Defines whether to generate API keys                                                                                                                                           | `true`                                                                                    |
 | `wopi.keys.newKeysExistingSecret`                           | Name of existing secret containing the WOPI keys. Must contain the keys `WOPI_PRIVATE_KEY`, `WOPI_PUBLIC_KEY`, `WOPI_MODULUS_KEY` and `WOPI_EXPONENT_KEY`. If not set, new keys will be generated and a secret will be created from them | `""`                            |
 | `wopi.keys.oldKeysExistingSecret`                           | Name of existing secret containing the old WOPI keys. Must contain the keys `WOPI_PRIVATE_KEY_OLD`, `WOPI_PUBLIC_KEY_OLD`, `WOPI_MODULUS_KEY_OLD` and `WOPI_EXPONENT_KEY_OLD`. If not set, new keys will be generated and a secret will be created from them | `""`        |
-| `metrics.enabled`                                           | Specifies the enabling StatsD for ONLYOFFICE Docs                                                                                                                              | `false`                                                                                   |
+| `metrics.enabled`                                           | Specifies the enabling StatsD for Euro-Office Docs                                                                                                                              | `false`                                                                                   |
 | `metrics.host`                                              | Defines StatsD listening host                                                                                                                                                  | `statsd-exporter-prometheus-statsd-exporter`                                              |
 | `metrics.port`                                              | Defines StatsD listening port                                                                                                                                                  | `8125`                                                                                    |
 | `metrics.prefix`                                            | Defines StatsD metrics prefix for backend services                                                                                                                             | `ds.`                                                                                     |
@@ -467,8 +467,8 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `podAntiAffinity.type`                                      | Types of Pod antiaffinity. Allowed values: `soft` or `hard`                                                                                                                    | `soft`                                                                                    |
 | `podAntiAffinity.topologyKey`                               | Node label key to match                                                                                                                                                        | `kubernetes.io/hostname`                                                                  |
 | `podAntiAffinity.weight`                                    | Priority when selecting node. It is in the range from 1 to 100                                                                                                                 | `100`                                                                                     |
-| `nodeSelector`                                              | Node labels for pods assignment. Each ONLYOFFICE Docs services can override the values specified here with its own                                                             | `{}`                                                                                      |
-| `tolerations`                                               | Tolerations for pods assignment. Each ONLYOFFICE Docs services can override the values specified here with its own                                                             | `[]`                                                                                      |
+| `nodeSelector`                                              | Node labels for pods assignment. Each Euro-Office Docs services can override the values specified here with its own                                                             | `{}`                                                                                      |
+| `tolerations`                                               | Tolerations for pods assignment. Each Euro-Office Docs services can override the values specified here with its own                                                             | `[]`                                                                                      |
 | `imagePullSecrets`                                          | Container image registry secret name                                                                                                                                           | `""`                                                                                      |
 | `requestFilteringAgent.allowPrivateIPAddress`               | Defines if it is allowed to connect private IP address or not. `requestFilteringAgent` parameters are used if JWT is disabled: `jwt.enabled=false`                             | `false`                                                                                   |
 | `requestFilteringAgent.allowMetaIPAddress`                  | Defines if it is allowed to connect meta address or not                                                                                                                        | `false`                                                                                   |
@@ -483,7 +483,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `customPlugins.defaultPlugins.enabled`                      | Defines whether [plugins](./CUSTOM_RESOURCES.md#disable-all-default-plugins) will be installed on the server and in the `Plugins` menu. It is executed if the `customPlugins.build` is set to `true`                              | `true`                                 |
 | `customPlugins.defaultPlugins.list`                         | Defines [which plugins](./CUSTOM_RESOURCES.md#install-selected-default-plugins-only) from the default list will be installed on the server and in the `Plugins` menu. It is executed if the `customPlugins.build` is set to `true`          | `[]`                         |
 | `customPlugins.emptyPluginsDir`                             | Defines whether a directory with plugins in containers will [contain files](./CUSTOM_RESOURCES.md#completely-disable-plugins-directory), including service files. If set to `true`, an empty volume with the `emptyDir` type will be mapped  | `false`                     |
-| `images.tag`                                                | Global image tag for all Onlyoffice Docs services and jobs                                                                                                                     | `9.3.1-1`                                                                                 |
+| `images.tag`                                                | Global image tag for all Euro-Office Docs services and jobs                                                                                                                     | `9.3.1-1`                                                                                 |
 | `docservice.annotations`                                    | Defines annotations that will be additionally added to Docservice Deployment. If set to, it takes priority over the `commonAnnotations`                                        | `{}`                                                                                      |
 | `docservice.podAnnotations`                                 | Map of annotations to add to the Docservice deployment pods                                                                                                                    | `rollme: "{{ randAlphaNum 5 \| quote }}"`                                                 |
 | `docservice.replicas`                                       | Docservice replicas quantity. If the `docservice.autoscaling.enabled` parameter is enabled, it is ignored                                                                      | `2`                                                                                       |
@@ -496,7 +496,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `docservice.terminationGracePeriodSeconds`                  | The time to terminate gracefully during which the Docservice Pod will have the `Terminating` status                                                                            | `30`                                                                                      |
 | `docservice.hostAliases`                                    | Adds [additional entries](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/) to the hosts file in the Docservice and Proxy containers                    | `[]`                                                                                      |
 | `docservice.initContainers`                                 | Defines containers that run before docservice and proxy containers in the Docservice deployment pod. For example, a container that changes the owner of the PersistentVolume   | `[]`                                                                                      |
-| `docservice.image.repository`                               | Docservice container image repository. This image repository is kept for backward compatibility. You can use `onlyoffice/docs-cluster-de` instead*                             | `onlyoffice/docs-docservice-de`                                                           |
+| `docservice.image.repository`                               | Docservice container image repository. This image is the same for all services                               | `ghcr.io/euro-office/cluster-docs`                                                           |
 | `docservice.image.tag`                                      | Docservice container image tag. If set to, it takes priority over the `images.tag`                                                                                             | `""`                                                                                      |
 | `docservice.image.pullPolicy`                               | Docservice container image pull policy                                                                                                                                         | `IfNotPresent`                                                                            |
 | `docservice.containerSecurityContext.enabled`               | Enable security context for the Docservice container                                                                                                                           | `false`                                                                                   |
@@ -532,7 +532,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `proxy.infoAllowedSecretKeyName`                            | The name of the key that contains the info auth user password. Used if `proxy.infoAllowedUser` is set                                                                          | `info-auth-password`                                                                      |
 | `proxy.infoAllowedExistingSecret`                           | Name of existing secret to use for info auth password. Used if `proxy.infoAllowedUser` is set. Must contain the key specified in `proxy.infoAllowedSecretKeyName`. If set to, it takes priority over the `proxy.infoAllowedPassword` | `""`                                |
 | `proxy.welcomePage.enabled`                                 | Defines whether the welcome page will be displayed                                                                                                                             | `true`                                                                                    |
-| `proxy.image.repository`                                    | Docservice Proxy container image repository. This image repository is kept for backward compatibility. You can use `onlyoffice/docs-cluster-de` instead*                       | `onlyoffice/docs-proxy-de`                                                                |
+| `proxy.image.repository`                                    | Docservice Proxy container image repository. This image is the same for all services                       | `ghcr.io/euro-office/cluster-docs`                                                                |
 | `proxy.image.tag`                                           | Docservice Proxy container image tag. If set to, it takes priority over the `images.tag`                                                                                       | `""`                                                                                      |
 | `proxy.image.pullPolicy`                                    | Docservice Proxy container image pull policy                                                                                                                                   | `IfNotPresent`                                                                            |
 | `proxy.containerSecurityContext.enabled`                    | Enable security context for the Proxy container                                                                                                                                | `false`                                                                                   |
@@ -556,7 +556,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `converter.terminationGracePeriodSeconds`                   | The time to terminate gracefully during which the Converter Pod will have the `Terminating` status                                                                             | `30`                                                                                      |
 | `converter.hostAliases`                                     | Adds [additional entries](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/) to the hosts file in the Converter container                                | `[]`                                                                                      |
 | `converter.initContainers`                                  | Defines containers that run before Converter container in the Converter deployment pod. For example, a container that changes the owner of the PersistentVolume                | `[]`                                                                                      |
-| `converter.image.repository`                                | Converter container image repository. This image repository is kept for backward compatibility. You can use `onlyoffice/docs-cluster-de` instead*                              | `onlyoffice/docs-converter-de`                                                            |
+| `converter.image.repository`                                | Converter container image repository. This image is the same for all services                              | `ghcr.io/euro-office/cluster-docs`                                                            |
 | `converter.image.tag`                                       | Converter container image tag. If set to, it takes priority over the `images.tag`                                                                                              | `""`                                                                                      |
 | `converter.image.pullPolicy`                                | Converter container image pull policy                                                                                                                                          | `IfNotPresent`                                                                            |
 | `converter.containerSecurityContext.enabled`                | Enable security context for the Converter container                                                                                                                            | `false`                                                                                   |
@@ -588,7 +588,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `adminpanel.terminationGracePeriodSeconds`                  | The time to terminate gracefully during which the Admin panel Pod will have the `Terminating` status                                                                             | `30`                                                                                    |
 | `adminpanel.hostAliases`                                    | Adds [additional entries](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/) to the hosts file in the Admin panel container                                | `[]`                                                                                    |
 | `adminpanel.initContainers`                                 | Defines containers that run before Admin panel container in the Admin panel deployment pod. For example, a container that changes the owner of the PersistentVolume              | `[]`                                                                                    |
-| `adminpanel.image.repository`                               | Admin panel container image repository. This image repository is kept for backward compatibility. You can use `onlyoffice/docs-cluster-de` instead*                              | `onlyoffice/docs-adminpanel-de`                                                         |
+| `adminpanel.image.repository`                               | Admin panel container image repository. This image is the same for all services                              | `ghcr.io/euro-office/cluster-docs`                                                         |
 | `adminpanel.image.tag`                                      | Admin panel container image tag. If set to, it takes priority over the `images.tag`                                                                                              | `""`                                                                                    |
 | `adminpanel.image.pullPolicy`                               | Admin panel container image pull policy                                                                                                                                          | `IfNotPresent`                                                                          |
 | `adminpanel.containerSecurityContext.enabled`               | Enable security context for the Admin panel container                                                                                                                            | `false`                                                                                 |
@@ -610,50 +610,50 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `example.terminationGracePeriodSeconds`                     | The time to terminate gracefully during which the Example Pod will have the `Terminating` status                                                                               | `30`                                                                                      |
 | `example.hostAliases`                                       | Adds [additional entries](https://kubernetes.io/docs/tasks/network/customize-hosts-file-for-pods/) to the hosts file in the Example container                                  | `[]`                                                                                      |
 | `example.initContainers`                                    | Defines containers that run before Example container in the Pod                                                                                                                | `[]`                                                                                      |
-| `example.image.repository`                                  | Example container image name                                                                                                                                                   | `onlyoffice/docs-example`                                                                 |
+| `example.image.repository`                                  | Example container image name                                                                                                                                                   | `ghcr.io/euro-office/cluster-example`                                                                 |
 | `example.image.tag`                                         | Example container image tag. If set to, it takes priority over the `images.tag`                                                                                                | `""`                                                                                      |
 | `example.image.pullPolicy`                                  | Example container image pull policy                                                                                                                                            | `IfNotPresent`                                                                            |
 | `example.containerSecurityContext.enabled`                  | Enable security context for the Example container                                                                                                                              | `false`                                                                                   |
-| `example.dsUrl`                                             | ONLYOFFICE Docs external address. It should be changed only if it is necessary to check the operation of the conversion in Example (e.g. http://\<documentserver-address\>/)   | `/`                                                                                       |
+| `example.dsUrl`                                             | Euro-Office Docs external address. It should be changed only if it is necessary to check the operation of the conversion in Example (e.g. http://\<documentserver-address\>/)   | `/`                                                                                       |
 | `example.resources.requests`                                | The requested resources for the Example container                                                                                                                              | `{}`                                                                                      |
 | `example.resources.limits`                                  | The resources limits for the Example container                                                                                                                                 | `{}`                                                                                      |
 | `example.extraEnvVars`                                      | An array with extra env variables for the Example container                                                                                                                    | `[]`                                                                                      |
-| `example.extraConf.configMap`                               | The name of the ConfigMap containing the json file that override the default values. See an example of creation [here](https://github.com/ONLYOFFICE/Kubernetes-Docs?tab=readme-ov-file#71-create-a-configmap-containing-a-json-file) | `""`                               |
+| `example.extraConf.configMap`                               | The name of the ConfigMap containing the json file that override the default values. See an example of creation [here](https://github.com/Euro-Office/Kubernetes-Docs?tab=readme-ov-file#71-create-a-configmap-containing-a-json-file) | `""`                               |
 | `example.extraConf.filename`                                | The name of the json file that contains custom values. Must be the same as the `key` name in `example.extraConf.ConfigMap`                                                     | `local.json`                                                                              |
 | `example.extraVolumes`                                      | An array with extra volumes for the Example Pod                                                                                                                                | `[]`                                                                                      |
 | `example.extraVolumeMounts`                                 | An array with extra volume mounts for the Example container                                                                                                                    | `[]`                                                                                      |
-| `jwt.enabled`                                               | Specifies the enabling the JSON Web Token validation by the ONLYOFFICE Docs. Common for inbox and outbox requests                                                              | `true`                                                                                    |
-| `jwt.secret`                                                | Defines the secret key to validate the JSON Web Token in the request to the ONLYOFFICE Docs. Common for inbox and outbox requests. If the value is empty, a random one will be generated, which will be used later in the upgrade. If a value is set, it will be used | `""` |
+| `jwt.enabled`                                               | Specifies the enabling the JSON Web Token validation by the Euro-Office Docs. Common for inbox and outbox requests                                                              | `true`                                                                                    |
+| `jwt.secret`                                                | Defines the secret key to validate the JSON Web Token in the request to the Euro-Office Docs. Common for inbox and outbox requests. If the value is empty, a random one will be generated, which will be used later in the upgrade. If a value is set, it will be used | `""` |
 | `jwt.header`                                                | Defines the http header that will be used to send the JSON Web Token. Common for inbox and outbox requests                                                                     | `Authorization`                                                                           |
-| `jwt.inBody`                                                | Specifies the enabling the token validation in the request body to the ONLYOFFICE Docs                                                                                         | `false`                                                                                   |
+| `jwt.inBody`                                                | Specifies the enabling the token validation in the request body to the Euro-Office Docs                                                                                         | `false`                                                                                   |
 | `jwt.inbox`                                                 | JSON Web Token validation parameters for inbox requests only. If not specified, the values of the parameters of the common `jwt` are used                                      | `{}`                                                                                      |
 | `jwt.outbox`                                                | JSON Web Token validation parameters for outbox requests only. If not specified, the values of the parameters of the common `jwt` are used                                     | `{}`                                                                                      |
 | `jwt.existingSecret`                                        | The name of an existing secret containing variables for jwt. If not specified, a secret named `jwt` will be created                                                            | `""`                                                                                      |
-| `service.existing`                                          | The name of an existing service for ONLYOFFICE Docs. If not specified, a service named `documentserver` will be created                                                        | `""`                                                                                      |
-| `service.annotations`                                       | Map of annotations to add to the ONLYOFFICE Docs service. If set to, it takes priority over the `commonAnnotations`                                                            | `{}`                                                                                      |
-| `service.type`                                              | ONLYOFFICE Docs service type                                                                                                                                                   | `ClusterIP`                                                                               |
-| `service.port`                                              | ONLYOFFICE Docs service port                                                                                                                                                   | `8888`                                                                                    |
-| `service.sessionAffinity`                                   | [Session Affinity](https://kubernetes.io/docs/reference/networking/virtual-ips/#session-affinity) for ONLYOFFICE Docs service. If not set, `None` will be set as the default value | `""`                                                                                  |
-| `service.sessionAffinityConfig`                             | [Configuration](https://kubernetes.io/docs/reference/networking/virtual-ips/#session-stickiness-timeout) for ONLYOFFICE Docs service Session Affinity. Used if the `service.sessionAffinity` is set | `{}`                                                                 |
-| `ingress.enabled`                                           | Enable the creation of an ingress for the ONLYOFFICE Docs                                                                                                                      | `false`                                                                                   |
+| `service.existing`                                          | The name of an existing service for Euro-Office Docs. If not specified, a service named `documentserver` will be created                                                        | `""`                                                                                      |
+| `service.annotations`                                       | Map of annotations to add to the Euro-Office Docs service. If set to, it takes priority over the `commonAnnotations`                                                            | `{}`                                                                                      |
+| `service.type`                                              | Euro-Office Docs service type                                                                                                                                                   | `ClusterIP`                                                                               |
+| `service.port`                                              | Euro-Office Docs service port                                                                                                                                                   | `8888`                                                                                    |
+| `service.sessionAffinity`                                   | [Session Affinity](https://kubernetes.io/docs/reference/networking/virtual-ips/#session-affinity) for Euro-Office Docs service. If not set, `None` will be set as the default value | `""`                                                                                  |
+| `service.sessionAffinityConfig`                             | [Configuration](https://kubernetes.io/docs/reference/networking/virtual-ips/#session-stickiness-timeout) for Euro-Office Docs service Session Affinity. Used if the `service.sessionAffinity` is set | `{}`                                                                 |
+| `ingress.enabled`                                           | Enable the creation of an ingress for the Euro-Office Docs                                                                                                                      | `false`                                                                                   |
 | `ingress.annotations`                                       | Map of annotations to add to the Ingress. If set to, it takes priority over the `commonAnnotations`                                                                            | `nginx.ingress.kubernetes.io/proxy-body-size: 100m`                                       |
 | `ingress.ingressClassName`                                  | Used to reference the IngressClass that should be used to implement this Ingress                                                                                               | `nginx`                                                                                   |
 | `ingress.controllerName`                                    | Used to distinguish between controllers with the same IngressClassName but from different vendors                                                                              | `ingress-nginx`                                                                           |
-| `ingress.host`                                              | Ingress hostname for the ONLYOFFICE Docs ingress                                                                                                                               | `""`                                                                                      |
+| `ingress.host`                                              | Ingress hostname for the Euro-Office Docs ingress                                                                                                                               | `""`                                                                                      |
 | `ingress.tenants`                                           | Ingress hostnames if you need to use more than one name. For example, for multitenancy. If set to, it takes priority over the `ingress.host`. If `ingress.ssl.enabled` is set to `true`, it is assumed that the certificate for all specified domains is kept secret by `ingress.ssl.secret` | `[]` |
-| `ingress.ssl.enabled`                                       | Enable ssl for the ONLYOFFICE Docs ingress                                                                                                                                     | `false`                                                                                   |
+| `ingress.ssl.enabled`                                       | Enable ssl for the Euro-Office Docs ingress                                                                                                                                     | `false`                                                                                   |
 | `ingress.ssl.secret`                                        | Secret name for ssl to mount into the Ingress                                                                                                                                  | `tls`                                                                                     |
-| `ingress.path`                                              | Specifies the path where ONLYOFFICE Docs will be available                                                                                                                     | `/`                                                                                       |
-| `ingress.pathType`                                          | Specifies the path type for the ONLYOFFICE Docs ingress resource. Allowed values are `Exact`, `Prefix` or `ImplementationSpecific`                                             | `ImplementationSpecific`                                                                  |
+| `ingress.path`                                              | Specifies the path where Euro-Office Docs will be available                                                                                                                     | `/`                                                                                       |
+| `ingress.pathType`                                          | Specifies the path type for the Euro-Office Docs ingress resource. Allowed values are `Exact`, `Prefix` or `ImplementationSpecific`                                             | `ImplementationSpecific`                                                                  |
 | `ingress.letsencrypt.enabled`                               | Enabling certificate request creation in Let's Encrypt. Used if `ingress.enabled` is set to `true`                                                                             | `false`                                                                                   |
 | `ingress.letsencrypt.clusterIssuerName`                     | ClusterIssuer Name                                                                                                                                                             | `letsencrypt-prod`                                                                        |
 | `ingress.letsencrypt.email`                                 | Your email address used for ACME registration                                                                                                                                  | `""`                                                                                      |
 | `ingress.letsencrypt.server`                                | The address of the Let's Encrypt server to which requests for certificates will be sent                                                                                        | `https://acme-v02.api.letsencrypt.org/directory`                                          |
 | `ingress.letsencrypt.secretName`                            | Name of a secret used to store the ACME account private key                                                                                                                    | `letsencrypt-prod-private-key`                                                            |
-| `openshift.route.enabled`                                   | Enable the creation of an OpenShift Route for the ONLYOFFICE Docs                                                                                                              | `false`                                                                                   |
+| `openshift.route.enabled`                                   | Enable the creation of an OpenShift Route for the Euro-Office Docs                                                                                                              | `false`                                                                                   |
 | `openshift.route.annotations`                               | Map of annotations to add to the OpenShift Route. If set to, it takes priority over the `commonAnnotations`                                                                    | `{}`                                                                                      |
-| `openshift.route.host`                                      | OpenShift Route hostname for the ONLYOFFICE Docs route                                                                                                                         | `""`                                                                                      |
-| `openshift.route.path`                                      | Specifies the path where ONLYOFFICE Docs will be available                                                                                                                     | `/`                                                                                       |
+| `openshift.route.host`                                      | OpenShift Route hostname for the Euro-Office Docs route                                                                                                                         | `""`                                                                                      |
+| `openshift.route.path`                                      | Specifies the path where Euro-Office Docs will be available                                                                                                                     | `/`                                                                                       |
 | `openshift.route.wildcardPolicy`                            | The policy for handling wildcard subdomains in the OpenShift Route. Allowed values are `None`, `Subdomain`                                                                     | `None`                                                                                    |
 | `grafana.enabled`                                           | Enable the installation of resources required for the visualization of metrics in Grafana                                                                                      | `false`                                                                                   |
 | `grafana.namespace`                                         | The name of the namespace in which RBAC components and Grafana resources will be deployed. If not set, the name will be taken from `namespaceOverride` if set, or .Release.Namespace | `""`                                                                                |
@@ -671,7 +671,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `webProxy.https`                                            | Web Proxy address for `HTTPS` traffic                                                                                                                                          | `https://proxy.example.com`                                                               |
 | `webProxy.noProxy`                                          | Patterns for IP addresses or k8s services name or domain names that shouldn’t use the Web Proxy                                                                                | `localhost,127.0.0.1,docservice`                                                          |
 | `privateCluster`                                            | Specify whether the k8s cluster is used in a private network without internet access                                                                                           | `false`                                                                                   |
-| `upgrade.job.enabled`                                       | Enable the execution of job pre-upgrade before upgrading ONLYOFFICE Docs                                                                                                       | `true`                                                                                    |
+| `upgrade.job.enabled`                                       | Enable the execution of job pre-upgrade before upgrading Euro-Office Docs                                                                                                       | `true`                                                                                    |
 | `upgrade.job.annotations`                                   | Defines annotations that will be additionally added to pre-upgrade Job. If set to, it takes priority over the `commonAnnotations`                                              | `{}`                                                                                      |
 | `upgrade.job.podAnnotations`                                | Map of annotations to add to the pre-upgrade Pod                                                                                                                               | `{}`                                                                                      |
 | `upgrade.job.customPodAntiAffinity`                         | Prohibiting the scheduling of pre-upgrade Job Pod relative to other Pods containing the specified labels on the same node                                                      | `{}`                                                                                      |
@@ -680,7 +680,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `upgrade.job.nodeSelector`                                  | Node labels for pre-upgrade Job Pod assignment. If set to, it takes priority over the `nodeSelector`                                                                           | `{}`                                                                                      |
 | `upgrade.job.tolerations`                                   | Tolerations for pre-upgrade Job Pod assignment. If set to, it takes priority over the `tolerations`                                                                            | `[]`                                                                                      |
 | `upgrade.job.initContainers`                                | Defines containers that run before pre-upgrade container in the Pod                                                                                                            | `[]`                                                                                      |
-| `upgrade.job.image.repository`                              | Job by upgrade image repository                                                                                                                                                | `onlyoffice/docs-utils`                                                                   |
+| `upgrade.job.image.repository`                              | Job by upgrade image repository                                                                                                                                                | `ghcr.io/euro-office/cluster-utils`                                                                   |
 | `upgrade.job.image.tag`                                     | Job by upgrade image tag. If set to, it takes priority over the `images.tag`                                                                                                   | `""`                                                                                      |
 | `upgrade.job.image.pullPolicy`                              | Job by upgrade image pull policy                                                                                                                                               | `IfNotPresent`                                                                            |
 | `upgrade.job.containerSecurityContext.enabled`              | Enable security context for the pre-upgrade container                                                                                                                          | `false`                                                                                   |
@@ -690,8 +690,8 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `upgrade.existingConfigmap.tblRemove.keyName`               | The name of the sql file containing instructions for deleting tables from the database. Must be the same as the `key` name in `upgrade.existingConfigmap.tblRemove.name`       | `removetbl.sql`                                                                           |
 | `upgrade.existingConfigmap.tblCreate.name`                  | The name of the existing ConfigMap that contains the sql file for craeting tables from the database                                                                            | `init-db-scripts`                                                                         |
 | `upgrade.existingConfigmap.tblCreate.keyName`               | The name of the sql file containing instructions for creating tables from the database. Must be the same as the `key` name in `upgrade.existingConfigmap.tblCreate.name`       | `createdb.sql`                                                                            |
-| `upgrade.existingConfigmap.dsStop`                          | The name of the existing ConfigMap that contains the ONLYOFFICE Docs upgrade script. If set, the four previous parameters are ignored. Must contain a key `stop.sh`            | `""`                                                                                      |
-| `rollback.job.enabled`                                      | Enable the execution of job pre-rollback before rolling back ONLYOFFICE Docs                                                                                                   | `true`                                                                                    |
+| `upgrade.existingConfigmap.dsStop`                          | The name of the existing ConfigMap that contains the Euro-Office Docs upgrade script. If set, the four previous parameters are ignored. Must contain a key `stop.sh`            | `""`                                                                                      |
+| `rollback.job.enabled`                                      | Enable the execution of job pre-rollback before rolling back Euro-Office Docs                                                                                                   | `true`                                                                                    |
 | `rollback.job.annotations`                                  | Defines annotations that will be additionally added to pre-rollback Job. If set to, it takes priority over the `commonAnnotations`                                             | `{}`                                                                                      |
 | `rollback.job.podAnnotations`                               | Map of annotations to add to the pre-rollback Pod                                                                                                                              | `{}`                                                                                      |
 | `rollback.job.customPodAntiAffinity`                        | Prohibiting the scheduling of pre-rollback Job Pod relative to other Pods containing the specified labels on the same node                                                     | `{}`                                                                                      |
@@ -700,7 +700,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `rollback.job.nodeSelector`                                 | Node labels for pre-rollback Job Pod assignment. If set to, it takes priority over the `nodeSelector`                                                                          | `{}`                                                                                      |
 | `rollback.job.tolerations`                                  | Tolerations for pre-rollback Job Pod assignment. If set to, it takes priority over the `tolerations`                                                                           | `[]`                                                                                      |
 | `rollback.job.initContainers`                               | Defines containers that run before pre-rollback container in the Pod                                                                                                           | `[]`                                                                                      |
-| `rollback.job.image.repository`                             | Job by rollback image repository                                                                                                                                               | `onlyoffice/docs-utils`                                                                   |
+| `rollback.job.image.repository`                             | Job by rollback image repository                                                                                                                                               | `ghcr.io/euro-office/cluster-utils`                                                                   |
 | `rollback.job.image.tag`                                    | Job by rollback image tag. If set to, it takes priority over the `images.tag`                                                                                                  | `""`                                                                                      |
 | `rollback.job.image.pullPolicy`                             | Job by rollback image pull policy                                                                                                                                              | `IfNotPresent`                                                                            |
 | `rollback.job.containerSecurityContext.enabled`             | Enable security context for the pre-rollback container                                                                                                                         | `false`                                                                                   |
@@ -710,8 +710,8 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `rollback.existingConfigmap.tblRemove.keyName`              | The name of the sql file containing instructions for deleting tables from the database. Must be the same as the `key` name in `rollback.existingConfigmap.tblRemove.name`      | `removetbl.sql`                                                                           |
 | `rollback.existingConfigmap.tblCreate.name`                 | The name of the existing ConfigMap that contains the sql file for craeting tables from the database                                                                            | `init-db-scripts`                                                                         |
 | `rollback.existingConfigmap.tblCreate.keyName`              | The name of the sql file containing instructions for creating tables from the database. Must be the same as the `key` name in `rollback.existingConfigmap.tblCreate.name`      | `createdb.sql`                                                                            |
-| `rollback.existingConfigmap.dsStop`                         | The name of the existing ConfigMap that contains the ONLYOFFICE Docs rollback script. If set, the four previous parameters are ignored. Must contain a key `stop.sh`           | `""`                                                                                      |
-| `delete.job.enabled`                                        | Enable the execution of job pre-delete before deleting ONLYOFFICE Docs                                                                                                         | `true`                                                                                    |
+| `rollback.existingConfigmap.dsStop`                         | The name of the existing ConfigMap that contains the Euro-Office Docs rollback script. If set, the four previous parameters are ignored. Must contain a key `stop.sh`           | `""`                                                                                      |
+| `delete.job.enabled`                                        | Enable the execution of job pre-delete before deleting Euro-Office Docs                                                                                                         | `true`                                                                                    |
 | `delete.job.annotations`                                    | Defines annotations that will be additionally added to pre-delete Job. If set to, it takes priority over the `commonAnnotations`                                               | `{}`                                                                                      |
 | `delete.job.podAnnotations`                                 | Map of annotations to add to the pre-delete Pod                                                                                                                                | `{}`                                                                                      |
 | `delete.job.customPodAntiAffinity`                          | Prohibiting the scheduling of pre-delete Job Pod relative to other Pods containing the specified labels on the same node                                                       | `{}`                                                                                      |
@@ -720,7 +720,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `delete.job.nodeSelector`                                   | Node labels for pre-delete Job Pod assignment. If set to, it takes priority over the `nodeSelector`                                                                            | `{}`                                                                                      |
 | `delete.job.tolerations`                                    | Tolerations for pre-delete Job Pod assignment. If set to, it takes priority over the `tolerations`                                                                             | `[]`                                                                                      |
 | `delete.job.initContainers`                                 | Defines containers that run before pre-delete container in the Pod                                                                                                             | `[]`                                                                                      |
-| `delete.job.image.repository`                               | Job by delete image repository                                                                                                                                                 | `onlyoffice/docs-utils`                                                                   |
+| `delete.job.image.repository`                               | Job by delete image repository                                                                                                                                                 | `ghcr.io/euro-office/cluster-utils`                                                                   |
 | `delete.job.image.tag`                                      | Job by delete image tag. If set to, it takes priority over the `images.tag`                                                                                                    | `""`                                                                                      |
 | `delete.job.image.pullPolicy`                               | Job by delete image pull policy                                                                                                                                                | `IfNotPresent`                                                                            |
 | `delete.job.containerSecurityContext.enabled`               | Enable security context for the pre-delete container                                                                                                                           | `false`                                                                                   |
@@ -728,8 +728,8 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `delete.job.resources.limits`                               | The resources limits for the job delete container                                                                                                                              | `{}`                                                                                      |
 | `delete.existingConfigmap.tblRemove.name`                   | The name of the existing ConfigMap that contains the sql file for deleting tables from the database                                                                            | `remove-db-scripts`                                                                       |
 | `delete.existingConfigmap.tblRemove.keyName`                | The name of the sql file containing instructions for deleting tables from the database. Must be the same as the `key` name in `delete.existingConfigmap.tblRemove.name`        | `removetbl.sql`                                                                           |
-| `delete.existingConfigmap.dsStop`                           | The name of the existing ConfigMap that contains the ONLYOFFICE Docs delete script. If set, the two previous parameters are ignored. Must contain a key `stop.sh`              | `""`                                                                                      |
-| `install.job.enabled`                                       | Enable the execution of job pre-install before installing ONLYOFFICE Docs                                                                                                      | `true`                                                                                    |
+| `delete.existingConfigmap.dsStop`                           | The name of the existing ConfigMap that contains the Euro-Office Docs delete script. If set, the two previous parameters are ignored. Must contain a key `stop.sh`              | `""`                                                                                      |
+| `install.job.enabled`                                       | Enable the execution of job pre-install before installing Euro-Office Docs                                                                                                      | `true`                                                                                    |
 | `install.job.annotations`                                   | Defines annotations that will be additionally added to pre-install Job. If set to, it takes priority over the `commonAnnotations`                                              | `{}`                                                                                      |
 | `install.job.podAnnotations`                                | Map of annotations to add to the pre-install Pod                                                                                                                               | `{}`                                                                                      |
 | `install.job.customPodAntiAffinity`                         | Prohibiting the scheduling of pre-install Job Pod relative to other Pods containing the specified labels on the same node                                                      | `{}`                                                                                      |
@@ -738,16 +738,16 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `install.job.nodeSelector`                                  | Node labels for pre-install Job Pod assignment. If set to, it takes priority over the `nodeSelector`                                                                           | `{}`                                                                                      |
 | `install.job.tolerations`                                   | Tolerations for pre-install Job Pod assignment. If set to, it takes priority over the `tolerations`                                                                            | `[]`                                                                                      |
 | `install.job.initContainers`                                | Defines containers that run before pre-install container in the Pod                                                                                                            | `[]`                                                                                      |
-| `install.job.image.repository`                              | Job by pre-install ONLYOFFICE Docs image repository                                                                                                                            | `onlyoffice/docs-utils`                                                                   |
-| `install.job.image.tag`                                     | Job by pre-install ONLYOFFICE Docs image tag. If set to, it takes priority over the `images.tag`                                                                               | `""`                                                                                      |
-| `install.job.image.pullPolicy`                              | Job by pre-install ONLYOFFICE Docs image pull policy                                                                                                                           | `IfNotPresent`                                                                            |
+| `install.job.image.repository`                              | Job by pre-install Euro-Office Docs image repository                                                                                                                            | `ghcr.io/euro-office/cluster-utils`                                                                   |
+| `install.job.image.tag`                                     | Job by pre-install Euro-Office Docs image tag. If set to, it takes priority over the `images.tag`                                                                               | `""`                                                                                      |
+| `install.job.image.pullPolicy`                              | Job by pre-install Euro-Office Docs image pull policy                                                                                                                           | `IfNotPresent`                                                                            |
 | `install.job.containerSecurityContext.enabled`              | Enable security context for the pre-install container                                                                                                                          | `false`                                                                                   |
 | `install.job.resources.requests`                            | The requested resources for the job pre-install container                                                                                                                      | `{}`                                                                                      |
 | `install.job.resources.limits`                              | The resources limits for the job pre-install container                                                                                                                         | `{}`                                                                                      |
 | `install.existingConfigmap.tblCreate.name`                  | The name of the existing ConfigMap that contains the sql file for craeting tables from the database                                                                            | `init-db-scripts`                                                                         |
 | `install.existingConfigmap.tblCreate.keyName`               | The name of the sql file containing instructions for creating tables from the database. Must be the same as the `key` name in `install.existingConfigmap.tblCreate.name`       | `createdb.sql`                                                                            |
 | `install.existingConfigmap.initdb`                          | The name of the existing ConfigMap that contains the initdb script. If set, the two previous parameters are ignored. Must contain a key `initdb.sh`                            | `""`                                                                                      |
-| `clearCache.job.enabled`                                    | Enable the execution of job Clear Cache after upgrading ONLYOFFICE Docs. Job by Clear Cache has a `post-upgrade` hook executes after any resources have been upgraded in Kubernetes. He clears the Cache directory | `true`                                                |
+| `clearCache.job.enabled`                                    | Enable the execution of job Clear Cache after upgrading Euro-Office Docs. Job by Clear Cache has a `post-upgrade` hook executes after any resources have been upgraded in Kubernetes. He clears the Cache directory | `true`                                                |
 | `clearCache.job.annotations`                                | Defines annotations that will be additionally added to Clear Cache Job. If set to, it takes priority over the `commonAnnotations`                                              | `{}`                                                                                      |
 | `clearCache.job.podAnnotations`                             | Map of annotations to add to the Clear Cache Pod                                                                                                                               | `{}`                                                                                      |
 | `clearCache.job.customPodAntiAffinity`                      | Prohibiting the scheduling of Clear Cache Job Pod relative to other Pods containing the specified labels on the same node                                                      | `{}`                                                                                      |
@@ -756,9 +756,9 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `clearCache.job.nodeSelector`                               | Node labels for Clear Cache Job Pod assignment. If set to, it takes priority over the `nodeSelector`                                                                           | `{}`                                                                                      |
 | `clearCache.job.tolerations`                                | Tolerations for Clear Cache Job Pod assignment. If set to, it takes priority over the `tolerations`                                                                            | `[]`                                                                                      |
 | `clearCache.job.initContainers`                             | Defines containers that run before Clear Cache container in the Pod                                                                                                            | `[]`                                                                                      |
-| `clearCache.job.image.repository`                           | Job by Clear Cache ONLYOFFICE Docs image repository                                                                                                                            | `onlyoffice/docs-utils`                                                                   |
-| `clearCache.job.image.tag`                                  | Job by Clear Cache ONLYOFFICE Docs image tag. If set to, it takes priority over the `images.tag`                                                                               | `""`                                                                                      |
-| `clearCache.job.image.pullPolicy`                           | Job by Clear Cache ONLYOFFICE Docs image pull policy                                                                                                                           | `IfNotPresent`                                                                            |
+| `clearCache.job.image.repository`                           | Job by Clear Cache Euro-Office Docs image repository                                                                                                                            | `ghcr.io/euro-office/cluster-utils`                                                                   |
+| `clearCache.job.image.tag`                                  | Job by Clear Cache Euro-Office Docs image tag. If set to, it takes priority over the `images.tag`                                                                               | `""`                                                                                      |
+| `clearCache.job.image.pullPolicy`                           | Job by Clear Cache Euro-Office Docs image pull policy                                                                                                                           | `IfNotPresent`                                                                            |
 | `clearCache.job.containerSecurityContext.enabled`           | Enable security context for the Clear Cache container                                                                                                                          | `false`                                                                                   |
 | `clearCache.job.resources.requests`                         | The requested resources for the job Clear Cache container                                                                                                                      | `{}`                                                                                      |
 | `clearCache.job.resources.limits`                           | The resources limits for the job Clear Cache container                                                                                                                         | `{}`                                                                                      |
@@ -772,9 +772,9 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `grafanaDashboard.job.nodeSelector`                         | Node labels for Grafana Dashboard Job Pod assignment. If set to, it takes priority over the `nodeSelector`                                                                     | `{}`                                                                                      |
 | `grafanaDashboard.job.tolerations`                          | Tolerations for Grafana Dashboard Job Pod assignment. If set to, it takes priority over the `tolerations`                                                                      | `[]`                                                                                      |
 | `grafanaDashboard.job.initContainers`                       | Defines containers that run before Grafana Dashboard container in the Pod                                                                                                      | `[]`                                                                                      |
-| `grafanaDashboard.job.image.repository`                     | Job by Grafana Dashboard ONLYOFFICE Docs image repository                                                                                                                      | `onlyoffice/docs-utils`                                                                   |
-| `grafanaDashboard.job.image.tag`                            | Job by Grafana Dashboard ONLYOFFICE Docs image tag. If set to, it takes priority over the `images.tag`                                                                         | `""`                                                                                      |
-| `grafanaDashboard.job.image.pullPolicy`                     | Job by Grafana Dashboard ONLYOFFICE Docs image pull policy                                                                                                                     | `IfNotPresent`                                                                            |
+| `grafanaDashboard.job.image.repository`                     | Job by Grafana Dashboard Euro-Office Docs image repository                                                                                                                      | `ghcr.io/euro-office/cluster-utils`                                                                   |
+| `grafanaDashboard.job.image.tag`                            | Job by Grafana Dashboard Euro-Office Docs image tag. If set to, it takes priority over the `images.tag`                                                                         | `""`                                                                                      |
+| `grafanaDashboard.job.image.pullPolicy`                     | Job by Grafana Dashboard Euro-Office Docs image pull policy                                                                                                                     | `IfNotPresent`                                                                            |
 | `grafanaDashboard.job.containerSecurityContext.enabled`     | Enable security context for the Grafana Dashboard container                                                                                                                    | `false`                                                                                   |
 | `grafanaDashboard.job.resources.requests`                   | The requested resources for the job Grafana Dashboard container                                                                                                                | `{}`                                                                                      |
 | `grafanaDashboard.job.resources.limits`                     | The resources limits for the job Grafana Dashboard container                                                                                                                   | `{}`                                                                                      |
@@ -786,13 +786,13 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `wopiKeysGeneration.job.nodeSelector`                       | Node labels for Wopi Keys Generation Job Pod assignment. If set to, it takes priority over the `nodeSelector`                                                                  | `{}`                                                                                      |
 | `wopiKeysGeneration.job.tolerations`                        | Tolerations for Wopi Keys Generation Job Pod assignment. If set to, it takes priority over the `tolerations`                                                                   | `[]`                                                                                      |
 | `wopiKeysGeneration.job.initContainers`                     | Defines containers that run before Wopi Keys Generation container in the Pod                                                                                                   | `[]`                                                                                      |
-| `wopiKeysGeneration.job.image.repository`                   | Job by Wopi Keys Generation ONLYOFFICE Docs image repository                                                                                                                   | `onlyoffice/docs-utils`                                                                   |
-| `wopiKeysGeneration.job.image.tag`                          | Job by Wopi Keys Generation ONLYOFFICE Docs image tag. If set to, it takes priority over the `images.tag`                                                                      | `""`                                                                                      |
-| `wopiKeysGeneration.job.image.pullPolicy`                   | Job by Wopi Keys Generation ONLYOFFICE Docs image pull policy                                                                                                                  | `IfNotPresent`                                                                            |
+| `wopiKeysGeneration.job.image.repository`                   | Job by Wopi Keys Generation Euro-Office Docs image repository                                                                                                                   | `ghcr.io/euro-office/cluster-utils`                                                                   |
+| `wopiKeysGeneration.job.image.tag`                          | Job by Wopi Keys Generation Euro-Office Docs image tag. If set to, it takes priority over the `images.tag`                                                                      | `""`                                                                                      |
+| `wopiKeysGeneration.job.image.pullPolicy`                   | Job by Wopi Keys Generation Euro-Office Docs image pull policy                                                                                                                  | `IfNotPresent`                                                                            |
 | `wopiKeysGeneration.job.containerSecurityContext.enabled`   | Enable security context for the Wopi Keys Generation container                                                                                                                 | `false`                                                                                   |
 | `wopiKeysGeneration.job.resources.requests`                 | The requested resources for the job Wopi Keys Generation container                                                                                                             | `{}`                                                                                      |
 | `wopiKeysGeneration.job.resources.limits`                   | The resources limits for the job Wopi Keys Generation container                                                                                                                | `{}`                                                                                      |
-| `wopiKeysDeletion.job.enabled `                             | Enable the execution of Wopi Keys Deletion job before deleting ONLYOFFICE Docs. He removes the WOPI secrets generated automatically. It is executed if `wopi.keys.generation` and `wopiKeysDeletion.job.enabled` are set to `true` | `true`                                |
+| `wopiKeysDeletion.job.enabled `                             | Enable the execution of Wopi Keys Deletion job before deleting Euro-Office Docs. He removes the WOPI secrets generated automatically. It is executed if `wopi.keys.generation` and `wopiKeysDeletion.job.enabled` are set to `true` | `true`                                |
 | `wopiKeysDeletion.job.annotations`                          | Defines annotations that will be additionally added to Wopi Keys Deletion Job. If set to, it takes priority over the `commonAnnotations`                                       | `{}`                                                                                      |
 | `wopiKeysDeletion.job.podAnnotations`                       | Map of annotations to add to the Wopi Keys Deletion Pod                                                                                                                        | `{}`                                                                                      |
 | `wopiKeysDeletion.job.customPodAntiAffinity`                | Prohibiting the scheduling of Wopi Keys Deletion Job Pod relative to other Pods containing the specified labels on the same node                                               | `{}`                                                                                      |
@@ -801,9 +801,9 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `wopiKeysDeletion.job.nodeSelector`                         | Node labels for Wopi Keys Deletion Job Pod assignment. If set to, it takes priority over the `nodeSelector`                                                                    | `{}`                                                                                      |
 | `wopiKeysDeletion.job.tolerations`                          | Tolerations for Wopi Keys Deletion Job Pod assignment. If set to, it takes priority over the `tolerations`                                                                     | `[]`                                                                                      |
 | `wopiKeysDeletion.job.initContainers`                       | Defines containers that run before Wopi Keys Deletion container in the Pod                                                                                                     | `[]`                                                                                      |
-| `wopiKeysDeletion.job.image.repository`                     | Job by Wopi Keys Deletion ONLYOFFICE Docs image repository                                                                                                                     | `onlyoffice/docs-utils`                                                                   |
-| `wopiKeysDeletion.job.image.tag`                            | Job by Wopi Keys Deletion ONLYOFFICE Docs image tag. If set to, it takes priority over the `images.tag`                                                                        | `""`                                                                                      |
-| `wopiKeysDeletion.job.image.pullPolicy`                     | Job by Wopi Keys Deletion ONLYOFFICE Docs image pull policy                                                                                                                    | `IfNotPresent`                                                                            |
+| `wopiKeysDeletion.job.image.repository`                     | Job by Wopi Keys Deletion Euro-Office Docs image repository                                                                                                                     | `ghcr.io/euro-office/cluster-utils`                                                                   |
+| `wopiKeysDeletion.job.image.tag`                            | Job by Wopi Keys Deletion Euro-Office Docs image tag. If set to, it takes priority over the `images.tag`                                                                        | `""`                                                                                      |
+| `wopiKeysDeletion.job.image.pullPolicy`                     | Job by Wopi Keys Deletion Euro-Office Docs image pull policy                                                                                                                    | `IfNotPresent`                                                                            |
 | `wopiKeysDeletion.job.containerSecurityContext.enabled`     | Enable security context for the Wopi Keys Deletion container                                                                                                                   | `false`                                                                                   |
 | `wopiKeysDeletion.job.resources.requests`                   | The requested resources for the job Wopi Keys Deletion container                                                                                                               | `{}`                                                                                      |
 | `wopiKeysDeletion.job.resources.limits`                     | The resources limits for the job Wopi Keys Deletion container                                                                                                                  | `{}`                                                                                      |
@@ -815,13 +815,13 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `customResources.job.nodeSelector`                          | Node labels for Custom Resources Job Pod assignment. If set to, it takes priority over the `nodeSelector`                                                                      | `{}`                                                                                      |
 | `customResources.job.tolerations`                           | Tolerations for Custom Resources Job Pod assignment. If set to, it takes priority over the `tolerations`                                                                       | `[]`                                                                                      |
 | `customResources.job.initContainers`                        | Defines containers that run before Custom Resources container in the Pod                                                                                                       | `[]`                                                                                      |
-| `customResources.job.image.repository`                      | Job by Custom Resources ONLYOFFICE Docs image repository*                                                                                                                       | `onlyoffice/docs-cluster-de`                                                              |
-| `customResources.job.image.tag`                             | Job by Custom Resources ONLYOFFICE Docs image tag. If set to, it takes priority over the `images.tag`                                                                          | `""`                                                                                      |
-| `customResources.job.image.pullPolicy`                      | Job by Custom Resources ONLYOFFICE Docs image pull policy                                                                                                                      | `IfNotPresent`                                                                            |
+| `customResources.job.image.repository`                      | Job by Custom Resources Euro-Office Docs image repository*                                                                                                                       | `ghcr.io/euro-office/cluster-docs`                                                              |
+| `customResources.job.image.tag`                             | Job by Custom Resources Euro-Office Docs image tag. If set to, it takes priority over the `images.tag`                                                                          | `""`                                                                                      |
+| `customResources.job.image.pullPolicy`                      | Job by Custom Resources Euro-Office Docs image pull policy                                                                                                                      | `IfNotPresent`                                                                            |
 | `customResources.job.containerSecurityContext.enabled`      | Enable security context for the Custom Resources container                                                                                                                     | `false`                                                                                   |
 | `customResources.job.resources.requests`                    | The requested resources for the job Custom Resources container                                                                                                                 | `{}`                                                                                      |
 | `customResources.job.resources.limits`                      | The resources limits for the job Custom Resources container                                                                                                                    | `{}`                                                                                      |
-| `tests.enabled`                                             | Enable the resources creation necessary for ONLYOFFICE Docs launch testing and connected dependencies availability testing. These resources will be used when running the `helm test` command | `true`                                                                     |
+| `tests.enabled`                                             | Enable the resources creation necessary for Euro-Office Docs launch testing and connected dependencies availability testing. These resources will be used when running the `helm test` command | `true`                                                                     |
 | `tests.annotations`                                         | Defines annotations that will be additionally added to Test Pod. If set to, it takes priority over the `commonAnnotations`                                                     | `{}`                                                                                      |
 | `tests.customPodAntiAffinity`                               | Prohibiting the scheduling of Test Pod relative to other Pods containing the specified labels on the same node                                                                 | `{}`                                                                                      |
 | `tests.podAffinity`                                         | Defines [Pod affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity) rules for Test Pod scheduling by nodes relative to other Pods | `{}`                                                                 |
@@ -829,7 +829,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `tests.nodeSelector`                                        | Node labels for Test Pod assignment. If set to, it takes priority over the `nodeSelector`                                                                                      | `{}`                                                                                      |
 | `tests.tolerations`                                         | Tolerations for Test Pod assignment. If set to, it takes priority over the `tolerations`                                                                                       | `[]`                                                                                      |
 | `tests.initContainers`                                      | Defines containers that run before Test container in the Pod                                                                                                                   | `[]`                                                                                      |
-| `tests.image.repository`                                    | Test container image name                                                                                                                                                      | `onlyoffice/docs-utils`                                                                   |
+| `tests.image.repository`                                    | Test container image name                                                                                                                                                      | `ghcr.io/euro-office/cluster-utils`                                                                   |
 | `tests.image.tag`                                           | Test container image tag. If set to, it takes priority over the `images.tag`                                                                                                   | `""`                                                                                      |
 | `tests.image.pullPolicy`                                    | Test container image pull policy                                                                                                                                               | `IfNotPresent`                                                                            |
 | `tests.containerSecurityContext.enabled`                    | Enable security context for the Test container                                                                                                                                 | `false`                                                                                   |
@@ -840,20 +840,20 @@ The `helm delete` command removes all the Kubernetes components associated with 
   - `-de`. For commercial Developer Edition
   - `-ee`. For commercial Enterprise Edition
 
-  The default value of this parameter refers to the ONLYOFFICE Document Server Developer Edition. To learn more about this edition and compare it with other editions, please see the comparison table on [this page](https://github.com/ONLYOFFICE/DocumentServer#onlyoffice-docs-editions).
+  The default value of this parameter refers to the Euro-Office Document Server Developer Edition. To learn more about this edition and compare it with other editions, please see the comparison table on [this page](https://github.com/Euro-Office/DocumentServer#euro-office-docs-editions).
 
 Specify each parameter using the `--set key=value[,key=value]` argument to helm install. For example,
 
 ```bash
-$ helm install documentserver onlyoffice/docs --set ingress.enabled=true,ingress.ssl.enabled=true,ingress.host=example.com
+$ helm install documentserver euro-office/docs --set ingress.enabled=true,ingress.ssl.enabled=true,ingress.host=example.com
 ```
 
-This command gives expose ONLYOFFICE Docs via HTTPS.
+This command gives expose Euro-Office Docs via HTTPS.
 
 Alternatively, a YAML file that specifies the values for the parameters can be provided while installing the chart. For example,
 
 ```bash
-$ helm install documentserver -f values.yaml onlyoffice/docs
+$ helm install documentserver -f values.yaml euro-office/docs
 ```
 
 > **Tip**: You can use the default [values.yaml](values.yaml)
@@ -865,35 +865,35 @@ $ helm install documentserver -f values.yaml onlyoffice/docs
 To deploy the example, set the `example.enabled` parameter to true:
 
 ```bash
-$ helm install documentserver onlyoffice/docs --set example.enabled=true
+$ helm install documentserver euro-office/docs --set example.enabled=true
 ```
 
 ### 5.2 Metrics deployment (optional)
 To deploy metrics, set `metrics.enabled` to true:
 
 ```bash
-$ helm install documentserver onlyoffice/docs --set metrics.enabled=true
+$ helm install documentserver euro-office/docs --set metrics.enabled=true
 ```
 
 If you want to use Grafana to visualize metrics, set `grafana.enabled` to `true`. If you want to use Nginx Ingress to access Grafana, set `grafana.ingress.enabled` to `true`:
 
 ```bash
-$ helm install documentserver onlyoffice/docs --set grafana.enabled=true --set grafana.ingress.enabled=true
+$ helm install documentserver euro-office/docs --set grafana.enabled=true --set grafana.ingress.enabled=true
 ```
 
-### 5.3 Expose ONLYOFFICE Docs
+### 5.3 Expose Euro-Office Docs
 
-#### 5.3.1 Expose ONLYOFFICE Docs via Service (HTTP Only)
+#### 5.3.1 Expose Euro-Office Docs via Service (HTTP Only)
 
-*You should skip step[#5.3.1](#531-expose-onlyoffice-docs-via-service-http-only) if you are going to expose ONLYOFFICE Docs via HTTPS*
+*You should skip step[#5.3.1](#531-expose-euro-office-docs-via-service-http-only) if you are going to expose Euro-Office Docs via HTTPS*
 
-This type of exposure has the least overheads of performance, it creates a loadbalancer to get access to ONLYOFFICE Docs.
+This type of exposure has the least overheads of performance, it creates a loadbalancer to get access to Euro-Office Docs.
 Use this type of exposure if you use external TLS termination, and don't have another WEB application in the k8s cluster.
 
-To expose ONLYOFFICE Docs via service, set the `service.type` parameter to LoadBalancer:
+To expose Euro-Office Docs via service, set the `service.type` parameter to LoadBalancer:
 
 ```bash
-$ helm install documentserver onlyoffice/docs --set service.type=LoadBalancer,service.port=80
+$ helm install documentserver euro-office/docs --set service.type=LoadBalancer,service.port=80
 
 ```
 
@@ -903,7 +903,7 @@ Run the following command to get the `documentserver` service IP:
 $ kubectl get service documentserver -o jsonpath="{.status.loadBalancer.ingress[*].ip}"
 ```
 
-After that, ONLYOFFICE Docs will be available at `http://DOCUMENTSERVER-SERVICE-IP/`.
+After that, Euro-Office Docs will be available at `http://DOCUMENTSERVER-SERVICE-IP/`.
 
 If the service IP is empty, try getting the `documentserver` service hostname:
 
@@ -911,10 +911,10 @@ If the service IP is empty, try getting the `documentserver` service hostname:
 $ kubectl get service documentserver -o jsonpath="{.status.loadBalancer.ingress[*].hostname}"
 ```
 
-In this case, ONLYOFFICE Docs will be available at `http://DOCUMENTSERVER-SERVICE-HOSTNAME/`.
+In this case, Euro-Office Docs will be available at `http://DOCUMENTSERVER-SERVICE-HOSTNAME/`.
 
 
-#### 5.3.2 Expose ONLYOFFICE Docs via Ingress
+#### 5.3.2 Expose Euro-Office Docs via Ingress
 
 #### 5.3.2.1 Installing the Kubernetes Nginx Ingress Controller
 
@@ -927,22 +927,22 @@ $ helm install nginx-ingress ingress-nginx/ingress-nginx --set controller.publis
 Note: To install Nginx Ingress with the same parameters and to enable exposing ingress-nginx metrics to be gathered by Prometheus, run the following command:
 
 ```bash
-$ helm install nginx-ingress -f https://raw.githubusercontent.com/ONLYOFFICE/Kubernetes-Docs/master/sources/ingress_values.yaml ingress-nginx/ingress-nginx
+$ helm install nginx-ingress -f https://raw.githubusercontent.com/Euro-Office/Kubernetes-Docs/master/sources/ingress_values.yaml ingress-nginx/ingress-nginx
 ```
 
 See more detail about installing Nginx Ingress via Helm [here](https://github.com/kubernetes/ingress-nginx/tree/master/charts/ingress-nginx).
 
-#### 5.3.2.2 Expose ONLYOFFICE Docs via HTTP
+#### 5.3.2.2 Expose Euro-Office Docs via HTTP
 
-*You should skip step[5.3.2.2](#5322-expose-onlyoffice-docs-via-http) if you are going to expose ONLYOFFICE Docs via HTTPS*
+*You should skip step[5.3.2.2](#5322-expose-euro-office-docs-via-http) if you are going to expose Euro-Office Docs via HTTPS*
 
-This type of exposure has more overheads of performance compared with exposure via service, it also creates a loadbalancer to get access to ONLYOFFICE Docs. 
+This type of exposure has more overheads of performance compared with exposure via service, it also creates a loadbalancer to get access to Euro-Office Docs. 
 Use this type if you use external TLS termination and when you have several WEB applications in the k8s cluster. You can use the one set of ingress instances and the one loadbalancer for those. It can optimize the entry point performance and reduce your cluster payments, cause providers can charge a fee for each loadbalancer.
 
-To expose ONLYOFFICE Docs via ingress HTTP, set the `ingress.enabled` parameter to true:
+To expose Euro-Office Docs via ingress HTTP, set the `ingress.enabled` parameter to true:
 
 ```bash
-$ helm install documentserver onlyoffice/docs --set ingress.enabled=true
+$ helm install documentserver euro-office/docs --set ingress.enabled=true
 ```
 
 Run the following command to get the `documentserver` ingress IP:
@@ -951,7 +951,7 @@ Run the following command to get the `documentserver` ingress IP:
 $ kubectl get ingress documentserver -o jsonpath="{.status.loadBalancer.ingress[*].ip}"
 ```
 
-After that, ONLYOFFICE Docs will be available at `http://DOCUMENTSERVER-INGRESS-IP/`.
+After that, Euro-Office Docs will be available at `http://DOCUMENTSERVER-INGRESS-IP/`.
 
 If the ingress IP is empty, try getting the `documentserver` ingress hostname:
 
@@ -959,11 +959,11 @@ If the ingress IP is empty, try getting the `documentserver` ingress hostname:
 $ kubectl get ingress documentserver -o jsonpath="{.status.loadBalancer.ingress[*].hostname}"
 ```
 
-In this case, ONLYOFFICE Docs will be available at `http://DOCUMENTSERVER-INGRESS-HOSTNAME/`.
+In this case, Euro-Office Docs will be available at `http://DOCUMENTSERVER-INGRESS-HOSTNAME/`.
 
-#### 5.3.2.3 Expose ONLYOFFICE Docs via HTTPS
+#### 5.3.2.3 Expose Euro-Office Docs via HTTPS
 
-This type of exposure allows you to enable internal TLS termination for ONLYOFFICE Docs.
+This type of exposure allows you to enable internal TLS termination for Euro-Office Docs.
 
 Create the `tls` secret with an ssl certificate inside.
 
@@ -976,7 +976,7 @@ $ kubectl create secret generic tls \
 ```
 
 ```bash
-$ helm install documentserver onlyoffice/docs --set ingress.enabled=true,ingress.ssl.enabled=true,ingress.host=example.com
+$ helm install documentserver euro-office/docs --set ingress.enabled=true,ingress.ssl.enabled=true,ingress.host=example.com
 
 ```
 
@@ -994,9 +994,9 @@ $ kubectl get ingress documentserver -o jsonpath="{.status.loadBalancer.ingress[
 
 Associate the `documentserver` ingress IP or hostname with your domain name through your DNS provider.
 
-After that, ONLYOFFICE Docs will be available at `https://your-domain-name/`.
+After that, Euro-Office Docs will be available at `https://your-domain-name/`.
 
-#### 5.3.2.4 Expose ONLYOFFICE Docs via HTTPS using the Let's Encrypt certificate
+#### 5.3.2.4 Expose Euro-Office Docs via HTTPS using the Let's Encrypt certificate
 - Add Helm repositories:
   ```bash
   $ helm repo add jetstack https://charts.jetstack.io
@@ -1012,12 +1012,12 @@ After that, ONLYOFFICE Docs will be available at `https://your-domain-name/`.
   ```
 Next, perform the installation or upgrade by setting the `ingress.enabled`, `ingress.ssl.enabled` and `ingress.letsencrypt.enabled` parameters to `true`. Also set your own values in the parameters `ingress.letsencrypt.email`, `ingress.host` or `ingress.tenants`(for example, `--set "ingress.tenants={tenant1.example.com,tenant2.example.com}"`) if you want to use multiple domain names.
 
-#### 5.3.2.5 Expose ONLYOFFICE Docs on a virtual path
-This type of exposure allows you to expose ONLYOFFICE Docs on a virtual path, for example, `http://your-domain-name/docs`.
-To expose ONLYOFFICE Docs via ingress on a virtual path, set the `ingress.enabled`, `ingress.host` and `ingress.path` parameters.
+#### 5.3.2.5 Expose Euro-Office Docs on a virtual path
+This type of exposure allows you to expose Euro-Office Docs on a virtual path, for example, `http://your-domain-name/docs`.
+To expose Euro-Office Docs via ingress on a virtual path, set the `ingress.enabled`, `ingress.host` and `ingress.path` parameters.
 
 ```bash
-$ helm install documentserver onlyoffice/docs --set ingress.enabled=true,ingress.host=your-domain-name,ingress.path=/docs
+$ helm install documentserver euro-office/docs --set ingress.enabled=true,ingress.host=your-domain-name,ingress.path=/docs
 ```
 
 The list of supported ingress controllers for virtual path configuration:
@@ -1027,22 +1027,22 @@ The list of supported ingress controllers for virtual path configuration:
 
 For virtual path configuration with `Ingress NGINX by Kubernetes`, append the pattern `(/|$)(.*)` to the `ingress.path`, for example, `/docs` becomes `/docs(/|$)(.*)`.
 
-#### 5.3.3 Expose ONLYOFFICE Docs via route in OpenShift
-This type of exposure allows you to expose ONLYOFFICE Docs via route in OpenShift. Route configuration can be found [here](./OPENSHIFT.md#publish-onlyoffice-docs-via-route).
+#### 5.3.3 Expose Euro-Office Docs via route in OpenShift
+This type of exposure allows you to expose Euro-Office Docs via route in OpenShift. Route configuration can be found [here](./OPENSHIFT.md#publish-euro-office-docs-via-route).
 
 ### 5.4 Admin Panel deployment (optional)
 
 To deploy the Admin Panel, set the `adminpanel.enabled` parameter to true:
 
 ```bash
-$ helm install documentserver onlyoffice/docs --set adminpanel.enabled=true
+$ helm install documentserver euro-office/docs --set adminpanel.enabled=true
 ```
 
 For first authorization, use the secret value `Bootstrap code`. You can find it by opening the adminpanel Pod log. The `Bootstrap code` is valid for 1 hour.
 
-### 6. Scale ONLYOFFICE Docs (optional)
+### 6. Scale Euro-Office Docs (optional)
 
-*This step is optional. You can skip step [6](#6-scale-onlyoffice-docs-optional) entirely if you want to use default deployment settings.*
+*This step is optional. You can skip step [6](#6-scale-euro-office-docs-optional) entirely if you want to use default deployment settings.*
 
 #### 6.1 Horizontal Pod Autoscaling
 
@@ -1081,12 +1081,12 @@ Do the same to scale the `converter` deployment:
 $ kubectl scale -n default deployment converter --replicas=POD_COUNT
 ```
 
-### 7. Update ONLYOFFICE Docs
+### 7. Update Euro-Office Docs
 
 It's necessary to set the parameters for updating. For example,
 
 ```bash
-$ helm upgrade documentserver onlyoffice/docs \
+$ helm upgrade documentserver euro-office/docs \
   --set images.tag=[version]
 ```
 
@@ -1095,22 +1095,22 @@ $ helm upgrade documentserver onlyoffice/docs \
 Or modify the values.yaml file and run the command:
 
 ```bash
-$ helm upgrade documentserver -f values.yaml onlyoffice/docs
+$ helm upgrade documentserver -f values.yaml euro-office/docs
 ```
 
-Running the helm upgrade command runs a hook that shuts down the ONLYOFFICE Docs and cleans up the database. This is needed when updating the version of ONLYOFFICE Docs. The default hook execution time is 300s.
+Running the helm upgrade command runs a hook that shuts down the Euro-Office Docs and cleans up the database. This is needed when updating the version of Euro-Office Docs. The default hook execution time is 300s.
 The execution time can be changed using --timeout [time], for example
 
 ```bash
-$ helm upgrade documentserver -f values.yaml onlyoffice/docs --timeout 15m
+$ helm upgrade documentserver -f values.yaml euro-office/docs --timeout 15m
 ```
 
-Note: When upgrading ONLYOFFICE Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
+Note: When upgrading Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
 
-If you want to update any parameter other than the version of the ONLYOFFICE Docs, then run the `helm upgrade` command without `hooks`, for example:
+If you want to update any parameter other than the version of the Euro-Office Docs, then run the `helm upgrade` command without `hooks`, for example:
 
 ```bash
-$ helm upgrade documentserver onlyoffice/docs --set jwt.enabled=false --no-hooks
+$ helm upgrade documentserver euro-office/docs --set jwt.enabled=false --no-hooks
 ```
 
 To rollback updates, run the following command:
@@ -1119,23 +1119,23 @@ To rollback updates, run the following command:
 $ helm rollback documentserver
 ```
 
-Note: When rolling back ONLYOFFICE Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
+Note: When rolling back Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
 
-### 8. Shutdown ONLYOFFICE Docs (optional)
+### 8. Shutdown Euro-Office Docs (optional)
 
 To perform the shutdown, run the following command:
 
 ```bash
-$ kubectl apply -f https://raw.githubusercontent.com/ONLYOFFICE/Kubernetes-Docs/master/sources/shutdown-ds.yaml -n <NAMESPACE>
+$ kubectl apply -f https://raw.githubusercontent.com/Euro-Office/Kubernetes-Docs/master/sources/shutdown-ds.yaml -n <NAMESPACE>
 ```
 
 Where:
- - `<NAMESPACE>` - Namespace where ONLYOFFICE Docs is installed. If not specified, the default value will be used: `default`.
+ - `<NAMESPACE>` - Namespace where Euro-Office Docs is installed. If not specified, the default value will be used: `default`.
 
 For example:
 
 ```bash
-$ kubectl apply -f https://raw.githubusercontent.com/ONLYOFFICE/Kubernetes-Docs/master/sources/shutdown-ds.yaml -n onlyoffice
+$ kubectl apply -f https://raw.githubusercontent.com/Euro-Office/Kubernetes-Docs/master/sources/shutdown-ds.yaml -n euro-office
 ```
 
 After successfully executing the Pod `shutdown-ds` that created the Job, delete this Job with the following command:
@@ -1144,13 +1144,13 @@ After successfully executing the Pod `shutdown-ds` that created the Job, delete 
 $ kubectl delete job shutdown-ds -n <NAMESPACE>
 ```
 
-If after stopping ONLYOFFICE Docs you need to start it again then restart docservice and converter pods. For example, using the following command:
+If after stopping Euro-Office Docs you need to start it again then restart docservice and converter pods. For example, using the following command:
 
 ```bash
 $ kubectl delete pod converter-*** docservice-*** -n <NAMESPACE>
 ```
 
-### 9. Update ONLYOFFICE Docs license (optional)
+### 9. Update Euro-Office Docs license (optional)
 
 After the release v5.1.1, you can update the license by simply recreating the secret with the new license, without deleting or rebooting pods. The documentserver is now able to dynamically reread the license file after replacing it. For example:
 
@@ -1173,9 +1173,9 @@ Thats all, the documentserver will reread the new license itself.
 $ kubectl delete pod converter-*** docservice-*** -n <NAMESPACE>
 ```
 
-### 10. ONLYOFFICE Docs installation test (optional)
+### 10. Euro-Office Docs installation test (optional)
 
-You can test ONLYOFFICE Docs availability and access to connected dependencies by running the following command:
+You can test Euro-Office Docs availability and access to connected dependencies by running the following command:
 
 ```bash
 $ helm test documentserver -n <NAMESPACE>
@@ -1193,7 +1193,7 @@ To view the log of the Pod running as a result of the `helm test` command, run t
 $ kubectl logs -f test-ds -n <NAMESPACE>
 ```
 
-The ONLYOFFICE Docs availability check is considered a priority, so if it fails with an error, the test is considered to be failed.
+The Euro-Office Docs availability check is considered a priority, so if it fails with an error, the test is considered to be failed.
 
 After this, you can delete the `test-ds` Pod by running the following command:
 
@@ -1218,20 +1218,20 @@ If your cluster already has `remove-db-scripts` and `init-db-scripts` configmaps
 $ kubectl delete cm remove-db-scripts init-db-scripts
 ```
 
-Download the ONLYOFFICE Docs database scripts for database cleaning and database tables creating:
+Download the Euro-Office Docs database scripts for database cleaning and database tables creating:
 
 If PostgreSQL is selected as the database server:
 
 ```bash
-$ wget -O removetbl.sql https://raw.githubusercontent.com/ONLYOFFICE/server/master/schema/postgresql/removetbl.sql
-$ wget -O createdb.sql https://raw.githubusercontent.com/ONLYOFFICE/server/master/schema/postgresql/createdb.sql
+$ wget -O removetbl.sql https://raw.githubusercontent.com/Euro-Office/server/master/schema/postgresql/removetbl.sql
+$ wget -O createdb.sql https://raw.githubusercontent.com/Euro-Office/server/master/schema/postgresql/createdb.sql
 ```
 
 If MySQL is selected as the database server:
 
 ```bash
-$ wget -O removetbl.sql https://raw.githubusercontent.com/ONLYOFFICE/server/master/schema/mysql/removetbl.sql
-$ wget -O createdb.sql https://raw.githubusercontent.com/ONLYOFFICE/server/master/schema/mysql/createdb.sql
+$ wget -O removetbl.sql https://raw.githubusercontent.com/Euro-Office/server/master/schema/mysql/removetbl.sql
+$ wget -O createdb.sql https://raw.githubusercontent.com/Euro-Office/server/master/schema/mysql/createdb.sql
 ```
 
 Create a configmap from them:
@@ -1289,9 +1289,9 @@ $ helm install grafana --version 12.1.8 bitnami/grafana \
 #### 1.2.1 Installing ready-made Grafana dashboards
 
 To install ready-made Grafana dashboards, set the `grafana.enabled` and `grafana.dashboard.enabled` parameters to `true`.
-If ONLYOFFICE Docs is already installed you need to run the `helm upgrade documentserver onlyoffice/docs --set grafana.enabled=true --set grafana.dashboard.enabled=true` command or `helm upgrade documentserver -f ./values.yaml onlyoffice/docs` if the parameters are specified in the [values.yaml](values.yaml) file.
+If Euro-Office Docs is already installed you need to run the `helm upgrade documentserver euro-office/docs --set grafana.enabled=true --set grafana.dashboard.enabled=true` command or `helm upgrade documentserver -f ./values.yaml euro-office/docs` if the parameters are specified in the [values.yaml](values.yaml) file.
 As a result, ready-made dashboards in the `JSON` format will be downloaded from the Grafana [website](https://grafana.com/grafana/dashboards),
-the necessary edits will be made to them and configmap will be created from them. A dashboard will also be added to visualize metrics coming from the ONLYOFFICE Docs (it is assumed that step [#6](#6-deploy-statsd-exporter) has already been completed).
+the necessary edits will be made to them and configmap will be created from them. A dashboard will also be added to visualize metrics coming from the Euro-Office Docs (it is assumed that step [#6](#6-deploy-statsd-exporter) has already been completed).
 
 #### 1.2.2 Installing Grafana
 
@@ -1334,10 +1334,10 @@ After executing this command, the following dashboards will be imported into Gra
   - RabbitMQ-Overview
   - PostgreSQL Database
   - NGINX Ingress controller
-  - ONLYOFFICE Docs
+  - Euro-Office Docs
   - Resource usage by Pods and Containers
 
-Note: You can see the description of the ONLYOFFICE Docs metrics that are visualized in Grafana [here](https://github.com/ONLYOFFICE/Kubernetes-Docs/wiki/Document-Server-Metrics).
+Note: You can see the description of the Euro-Office Docs metrics that are visualized in Grafana [here](https://github.com/Euro-Office/Kubernetes-Docs/wiki/Document-Server-Metrics).
 
 See more details about installing Grafana via Helm [here](https://github.com/bitnami/charts/tree/master/bitnami/grafana).
 
@@ -1345,9 +1345,9 @@ See more details about installing Grafana via Helm [here](https://github.com/bit
 
 Note: It is assumed that step [#5.3.2.1](#5321-installing-the-kubernetes-nginx-ingress-controller) has already been completed.
 
-If ONLYOFFICE Docs was installed with the parameter `grafana.ingress.enabled` (step [#5.2](#52-metrics-deployment-optional)) then access to Grafana will be at: `http://INGRESS-ADDRESS/grafana/`
+If Euro-Office Docs was installed with the parameter `grafana.ingress.enabled` (step [#5.2](#52-metrics-deployment-optional)) then access to Grafana will be at: `http://INGRESS-ADDRESS/grafana/`
 
-If Ingres was installed using a secure connection (step [#5.3.2.3](#5323-expose-onlyoffice-docs-via-https)), then access to Grafana will be at: `https://your-domain-name/grafana/`
+If Ingres was installed using a secure connection (step [#5.3.2.3](#5323-expose-euro-office-docs-via-https)), then access to Grafana will be at: `https://your-domain-name/grafana/`
 
 ### 3. View gathered metrics in Grafana
 
