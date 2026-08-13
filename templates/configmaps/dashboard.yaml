@@ -25,8 +25,8 @@ data:
     wget https://grafana.com/api/dashboards/10991/revisions/8/download -O /scripts/dashboard-rabbitmq.json
     wget https://grafana.com/api/dashboards/9628/revisions/6/download -O /scripts/dashboard-postgresql.json
     wget https://grafana.com/api/dashboards/9614/revisions/1/download -O /scripts/dashboard-nginx-ingress.json
-    wget https://raw.githubusercontent.com/ONLYOFFICE/Kubernetes-Docs/master/sources/metrics/documentserver-statsd-exporter.json -O /scripts/dashboard-documentserver.json
-    wget https://raw.githubusercontent.com/ONLYOFFICE/Kubernetes-Docs/master/sources/metrics/kubernetes-cluster-resourses.json -O /scripts/dashboard-cluster-resourses.json
+    wget https://raw.githubusercontent.com/Euro-Office/Kubernetes-Docs/master/sources/metrics/documentserver-statsd-exporter.json -O /scripts/dashboard-documentserver.json
+    wget https://raw.githubusercontent.com/Euro-Office/Kubernetes-Docs/master/sources/metrics/kubernetes-cluster-resourses.json -O /scripts/dashboard-cluster-resourses.json
     sed -i 's/${DS_PROMETHEUS}/Prometheus/g' /scripts/*.json
     sed -i 's/$DS_PROMETHEUS/Prometheus/g' /scripts/*.json
     for i in "${CM[@]}"; do
