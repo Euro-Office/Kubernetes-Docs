@@ -436,6 +436,59 @@ Redis topology required by the selected mode: `redisHost` and `redisPort` for
 standalone, `redisClusterNodes` for cluster, or `redisSentinelNodes` for
 Sentinel. Cluster and Sentinel cannot be configured together.
 
+#### Redis authentication secrets
+
+When using an existing Redis Secret, set `connections.redisExistingSecret`.
+The Secret must contain the key configured by
+`connections.redisSecretKeyName`, which defaults to `redis-password`:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis
+type: Opaque
+stringData:
+  redis-password: your-redis-password
+```
+
+Redis Sentinel authentication has two independent layers: Redis-node
+authentication and Sentinel authentication. If both are protected, configure
+both `connections.redisExistingSecret`/`connections.redisUser` and
+`connections.redisSentinelExistingSecret`/`connections.redisSentinelUser`.
+The Redis Secret supplies the node password, while the Sentinel Secret
+supplies the Sentinel ACL password.
+
+For the Sentinel ACL credentials, set
+`connections.redisSentinelExistingSecret` and
+`connections.redisSentinelUser`. The Secret must contain the key configured by
+`connections.redisSentinelSecretKeyName`, which defaults to
+`sentinel-password`:
+
+```yaml
+connections:
+  redisSentinelExistingSecret: redis-sentinel
+  redisSentinelSecretKeyName: sentinel-password
+  redisSentinelUser: sentinel-user
+  redisSentinelNoPass: false
+```
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-sentinel
+type: Opaque
+stringData:
+  sentinel-password: your-sentinel-password
+```
+
+The Secrets must be in the namespace where the chart is installed. Set
+`connections.redisNoPass: true` when Redis nodes do not require a password, or
+`connections.redisSentinelNoPass: true` when Sentinel does not require ACL
+credentials. Only the corresponding credentials are omitted; the other layer
+can still remain authenticated.
+
 | Parameter                                                   | Description                                                                                                                                                                    | Default                                                                                   |
 |-------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
 | `connections.dbType`                                        | The database type. Possible values are `postgres`, `mariadb`, `mysql`, `oracle`, `mssql` or `dameng`                                                                           | `postgres`                                                                                |
