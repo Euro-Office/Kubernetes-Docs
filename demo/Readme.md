@@ -110,7 +110,7 @@ Verify connectivity before installing the chart:
 # Postgres
 kubectl run pgtest --rm -it --restart=Never -n euro-office \
   --image=postgres:16 -- \
-  psql "postgresql://onlyoffice:onlyoffice@pg-postgresql:5432/onlyoffice" -c "SELECT 1;"
+  psql "postgresql://eurooffice:eurooffice@pg-postgresql:5432/eurooffice" -c "SELECT 1;"
 
 # Redis
 kubectl run redistest --rm -it --restart=Never -n euro-office \
