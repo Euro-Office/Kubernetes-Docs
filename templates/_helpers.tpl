@@ -640,13 +640,17 @@ Get the Secret value
 {{- $existValue := index . 1 -}}
 {{- $getSecretName := index . 2 -}}
 {{- $getSecretKey := index . 3 -}}
+{{- $length := 16 -}}
+{{- if ge (len .) 5 -}}
+    {{- $length = index . 4 -}}
+{{- end -}}
 {{- if not $existValue }}
     {{- $secret_lookup := (lookup "v1" "Secret" $context.Release.Namespace $getSecretName).data }}
     {{- $getSecretValue := (get $secret_lookup $getSecretKey) | b64dec }}
     {{- if $getSecretValue -}}
         {{- printf "%s" $getSecretValue -}}
     {{- else -}}
-        {{- printf "%s" (randAlpha 16) -}}
+        {{- printf "%s" (randAlpha $length) -}}
     {{- end -}}
 {{- else -}}
     {{- printf "%s" $existValue -}}
