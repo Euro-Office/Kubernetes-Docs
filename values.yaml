@@ -31,17 +31,19 @@ connections:
   ## connections.dbPassword Database user password
   ## If set to, it takes priority over the `connections.dbExistingSecret`
   dbPassword: ""
-  ## connections.redisConnectorName Defines which connector to use to connect to Redis
-  ## If you need to connect to Redis Sentinel, set the value `ioredis`
-  redisConnectorName: redis
   ## connections.redisHost The IP address or the name of the Redis host
-  ## Not used if the values are set in `connections.redisClusterNodes` and `connections.redisSentinelNodes`
+  ## Used for standalone Redis and as the startup/readiness fallback when a topology is configured.
+  ## In Sentinel mode, set this to a reachable fallback endpoint; Sentinel discovery uses redisSentinelNodes.
   redisHost: redis-master
   ## connections.redisPort The Redis server port number
-  ## Not used if the values are set in `connections.redisClusterNodes` and `connections.redisSentinelNodes`
+  ## Used with connections.redisHost for the standalone/startup fallback endpoint.
   redisPort: "6379"
+  ## connections.redisTLS Enable TLS for standalone Redis, Cluster, and Sentinel-discovered Redis nodes
+  ## Requires a DocumentServer image supporting REDIS_SERVER_TLS. Ports remain unchanged.
+  redisTLS: false
   ## connections.redisUser The Redis user name
   ## ref: https://redis.io/docs/management/security/acl/
+  ## Omit Redis authentication by setting connections.redisNoPass to true.
   ## The value in this parameter overrides the value set in the `options` object in `local.json` if you add custom configuration file
   redisUser: default
   ## connections.redisDBNum Number of the redis logical database to be selected
@@ -76,28 +78,33 @@ connections:
   ## There is no need to specify every node, 3 should be enough
   ## You can specify multiple values
   ## It must be specified in the `host:port` format
-  ## Used if `connections.redisConnectorName` is set to `ioredis`
   ## Example:
   ## redisSentinelNodes:
   ## - 10.244.0.79:26379
   ## - 192.168.1.25:26379
   redisSentinelNodes: []
   ## connections.redisSentinelGroupName Name of a group of Redis instances composed of a master and one or more slaves
-  ## Used if `connections.redisConnectorName` is set to `ioredis`
+  ## Redis Sentinel is enabled when `connections.redisSentinelNodes` is not empty
   redisSentinelGroupName: mymaster
+  ## connections.redisSentinelTLS Enable TLS for Sentinel discovery independently of connections.redisTLS
+  ## Requires a DocumentServer image supporting REDIS_SENTINEL_TLS. Ports remain unchanged.
+  redisSentinelTLS: false
+  ## connections.redisSentinelUser The Redis Sentinel user name
+  ## Required together with a password when Sentinel ACL authentication is enabled.
+  redisSentinelUser: ""
   ## connections.redisSentinelExistingSecret Name of existing secret to use for Redis Sentinel password
   ## Must contain the key specified in `connections.redisSentinelSecretKeyName`
-  ## The password from this secret overrides the value for the password set in the `iooptions` object in `local.json` if you add custom configuration file
+  ## The password from this secret overrides the value for the password set in the `optionsSentinel` object in `local.json` if you add custom configuration file
   redisSentinelExistingSecret: ""
   ## connections.redisSentinelSecretKeyName The name of the key that contains the Redis Sentinel user password
   ## If you set a password in `redisSentinelPassword`, a secret will be automatically created, the key name of which will be the value set here
   redisSentinelSecretKeyName: sentinel-password
   ## connections.redisSentinelPassword The password set for the Redis Sentinel account
   ## If set to, it takes priority over the `connections.redisSentinelExistingSecret`
-  ## The value in this parameter overrides the value set in the `iooptions` object in `local.json` if you add custom configuration file
+  ## The value in this parameter overrides the value set in the `optionsSentinel` object in `local.json` if you add custom configuration file
   redisSentinelPassword: ""
   ## connections.redisSentinelNoPass Defines whether to use a Redis Sentinel auth without a password
-  ## If the connection to Redis Sentinel does not require a password, set the value to `true`
+  ## If Sentinel does not require ACL authentication, set the value to `true`; the Sentinel user and password are then omitted.
   redisSentinelNoPass: true
   ## connections.amqpType Defines the AMQP server type
   ## Possible values are `rabbitmq` or `activemq`
@@ -496,6 +503,21 @@ images:
 ## This block defines the parameters common to all the Pods of this deployment
 ##
 docservice:
+  ## docservice.editorDataStorage Editor data storage mode. This setting and
+  ## editorStatStorage may be configured independently; one may use memory
+  ## while the other uses Redis.
+  ## `memory` keeps the application defaults. Redis-backed modes select
+  ## `editorDataRedis` and use the configured Redis topology.
+  ## Possible values are `memory`, `standalone`, `sentinel` or `cluster`.
+  editorDataStorage: memory
+  ## docservice.editorStatStorage Editor statistics storage mode. If omitted,
+  ## statistics use the editorDataStorage module. Set explicitly to `memory`
+  ## to keep statistics in memory when editor data uses Redis. If both
+  ## settings use Redis, they must use the same topology because they share
+  ## the editorDataRedis connection. Different Redis topologies are not
+  ## supported.
+  ## Possible values are `memory`, `standalone`, `sentinel` or `cluster`.
+  editorStatStorage: ""
   ## docservice.annotations Defines annotations that will be additionally added to Docservice Deployment
   ## If set to, it takes priority over the `commonAnnotations`
   ## You can also use `tpl` as the value for the key

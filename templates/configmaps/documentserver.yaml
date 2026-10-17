@@ -7,28 +7,42 @@ metadata:
   labels:
     {{- include "ds.labels.commonLabels" . | trim | nindent 4 }}
   {{- end }}
-  {{- if .Values.commonAnnotations }}
+{{- if .Values.commonAnnotations }}
   annotations: {{- include "ds.annotations.commonAnnotations" ( dict "keyName" .Values.commonAnnotations "context" $ ) | nindent 4 }}
-  {{- end }}
+{{- end }}
+{{- $_ := include "ds.editor.storage.validate" . }}
 data:
   APPLICATION_NAME: {{ .Values.product.name }}
+  {{- if ne (default "memory" .Values.docservice.editorDataStorage) "memory" }}
+  EDITOR_DATA_STORAGE: editorDataRedis
+  {{- end }}
+  {{- if ne (default (default "memory" .Values.docservice.editorDataStorage) .Values.docservice.editorStatStorage) "memory" }}
+  EDITOR_STAT_STORAGE: editorDataRedis
+  {{- else if eq .Values.docservice.editorStatStorage "memory" }}
+  EDITOR_STAT_STORAGE: editorDataMemory
+  {{- end }}
   DB_TYPE: {{ template "ds.db.type" . }}
   DB_USER: {{ .Values.connections.dbUser }}
   DB_HOST: {{ .Values.connections.dbHost }}
   DB_PORT: {{ .Values.connections.dbPort | quote }}
   DB_NAME: {{ .Values.connections.dbName }}
-  REDIS_CONNECTOR_NAME: {{ .Values.connections.redisConnectorName }}
   REDIS_SERVER_HOST: {{ .Values.connections.redisHost }}
   REDIS_SERVER_PORT: {{ .Values.connections.redisPort | quote }}
-  REDIS_SERVER_USER: {{ .Values.connections.redisUser }}
+  REDIS_SERVER_TLS: {{ .Values.connections.redisTLS | quote }}
+  REDIS_SENTINEL_TLS: {{ .Values.connections.redisSentinelTLS | quote }}
+  REDIS_CONNECTOR_NAME: redis
+  {{- if not .Values.connections.redisNoPass }}
+  REDIS_SERVER_USER: {{ .Values.connections.redisUser | quote }}
+  {{- end }}
   REDIS_SERVER_DB_NUM: {{ .Values.connections.redisDBNum | quote }}
-  {{- if.Values.connections.redisClusterNodes }}
+  {{- if .Values.connections.redisClusterNodes }}
   REDIS_CLUSTER_NODES: {{ join " " .Values.connections.redisClusterNodes }}
   {{- end }}
-  {{- if eq .Values.connections.redisConnectorName "ioredis" }}
-  REDIS_SENTINEL_GROUP_NAME: {{ .Values.connections.redisSentinelGroupName }}
-  {{- if.Values.connections.redisSentinelNodes }}
+  {{- if .Values.connections.redisSentinelNodes }}
   REDIS_SENTINEL_NODES: {{ join " " .Values.connections.redisSentinelNodes }}
+  REDIS_SENTINEL_GROUP_NAME: {{ .Values.connections.redisSentinelGroupName }}
+  {{- if not .Values.connections.redisSentinelNoPass }}
+  REDIS_SENTINEL_USER: {{ .Values.connections.redisSentinelUser | quote }}
   {{- end }}
   {{- end }}
   AMQP_TYPE: {{ .Values.connections.amqpType }}

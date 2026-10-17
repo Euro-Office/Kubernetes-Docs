@@ -1,0 +1,84 @@
+{{- if and .Values.tests.enabled (or (or (eq (default "memory" .Values.docservice.editorDataStorage) "sentinel") (eq (default "memory" .Values.docservice.editorStatStorage) "sentinel")) (or (eq (default "memory" .Values.docservice.editorDataStorage) "cluster") (eq (default "memory" .Values.docservice.editorStatStorage) "cluster"))) }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "test-redis-config") }}
+  namespace: {{ include "ds.namespace" . | quote }}
+  labels:
+    app.kubernetes.io/component: test-redis-config
+    {{- if .Values.commonLabels }}
+    {{- include "ds.labels.commonLabels" . | trim | nindent 4 }}
+    {{- end }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- if or .Values.commonAnnotations .Values.tests.annotations }}
+    {{- $dictValue := default .Values.commonAnnotations .Values.tests.annotations }}
+    {{- include "ds.annotations.commonAnnotations" ( dict "keyName" $dictValue "context" $ ) | nindent 4 }}
+    {{- end }}
+spec:
+  serviceAccountName: {{ include "ds.serviceAccountName" . }}
+  {{- if .Values.podSecurityContext.enabled }}
+  securityContext: {{- toYaml .Values.podSecurityContext.tests | nindent 4 }}
+  {{- end }}
+  restartPolicy: Never
+  {{- if or .Values.tests.customPodAntiAffinity .Values.tests.podAffinity .Values.tests.nodeAffinity }}
+  affinity:
+    {{- with .Values.tests.customPodAntiAffinity }}
+    podAntiAffinity:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.tests.podAffinity }}
+    podAffinity:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.tests.nodeAffinity }}
+    nodeAffinity:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.nodeSelector .Values.tests.nodeSelector }}
+  nodeSelector: {{ toYaml (default .Values.nodeSelector .Values.tests.nodeSelector) | nindent 4 }}
+  {{- end }}
+  {{- if or .Values.tolerations .Values.tests.tolerations }}
+  tolerations: {{ toYaml (default .Values.tolerations .Values.tests.tolerations) | nindent 4 }}
+  {{- end }}
+  {{- if .Values.imagePullSecrets }}
+  imagePullSecrets:
+  - name: {{ .Values.imagePullSecrets }}
+  {{- end }}
+  {{- with .Values.tests.initContainers }}
+  initContainers:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+  - name: redis-config
+    image: {{ .Values.docservice.image.repository }}:{{ default .Values.images.tag .Values.docservice.image.tag }}
+    imagePullPolicy: {{ .Values.docservice.image.pullPolicy }}
+    {{- if .Values.tests.containerSecurityContext.enabled }}
+    securityContext: {{- omit .Values.tests.containerSecurityContext "enabled" | toYaml | nindent 6 }}
+    {{- end }}
+    resources: {{ toYaml .Values.tests.resources | nindent 6 }}
+    command: ["bash", "/scripts/test_redis_config.sh"]
+    env:
+    - name: COMPANY_NAME
+      value: {{ .Values.product.name | quote }}
+    - name: ENTRYPOINT_CONFIG_ONLY
+      value: "true"
+    - name: JWT_ENABLED
+      value: "false"
+    {{ include "ds.redis.env" . | nindent 4 }}
+    envFrom:
+    - configMapRef:
+        name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "documentserver") }}
+    volumeMounts:
+    - name: test-redis-config
+      mountPath: /scripts/test_redis_config.sh
+      subPath: test_redis_config.sh
+  volumes:
+  - name: test-redis-config
+    configMap:
+      name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "test-redis-config") }}
+      defaultMode: 0755
+{{- end }}

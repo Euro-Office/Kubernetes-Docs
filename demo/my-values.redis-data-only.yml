@@ -1,0 +1,7 @@
+# Editor data uses Redis; editor statistics keep the memory backend.
+# Apply together with my-values.yml:
+# helm install docs .. -n euro-office -f my-values.yml -f my-values.redis-data-only.yml
+
+docservice:
+  editorDataStorage: standalone
+  editorStatStorage: memory

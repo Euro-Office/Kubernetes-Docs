@@ -12,6 +12,56 @@ Check the DB type
 {{- end -}}
 
 {{/*
+Validate editor storage modes and their Redis topology requirements.
+*/}}
+{{- define "ds.editor.storage.validate" -}}
+{{- $allowed := list "memory" "standalone" "sentinel" "cluster" -}}
+{{- $dataStorage := default "memory" .Values.docservice.editorDataStorage -}}
+{{- $statStorage := default $dataStorage .Values.docservice.editorStatStorage -}}
+{{- if and .Values.connections.redisClusterNodes .Values.connections.redisSentinelNodes -}}
+  {{- fail "Redis Cluster and Redis Sentinel nodes cannot be configured together." -}}
+{{- end -}}
+{{- if and .Values.connections.redisSentinelNodes (not .Values.connections.redisSentinelNoPass) -}}
+  {{- if empty .Values.connections.redisSentinelUser -}}
+    {{- fail "Authenticated Redis Sentinel requires connections.redisSentinelUser." -}}
+  {{- end -}}
+  {{- if and (empty .Values.connections.redisSentinelPassword) (empty .Values.connections.redisSentinelExistingSecret) -}}
+    {{- fail "Authenticated Redis Sentinel requires connections.redisSentinelPassword or connections.redisSentinelExistingSecret." -}}
+  {{- end -}}
+{{- end -}}
+{{- if not (has $dataStorage $allowed) -}}
+  {{- fail (printf "Unsupported editorDataStorage %q. Possible values are memory, standalone, sentinel or cluster." $dataStorage) -}}
+{{- end -}}
+{{- if not (has $statStorage $allowed) -}}
+  {{- fail (printf "Unsupported editorStatStorage %q. Possible values are memory, standalone, sentinel or cluster." $statStorage) -}}
+{{- end -}}
+{{- if and (ne $dataStorage "memory") (ne $statStorage "memory") (ne $dataStorage $statStorage) -}}
+  {{- fail "editorDataStorage and editorStatStorage must use the same Redis topology when both are not memory." -}}
+{{- end -}}
+{{- $redisStorage := $dataStorage -}}
+{{- if eq $redisStorage "memory" -}}
+  {{- $redisStorage = $statStorage -}}
+{{- end -}}
+{{- if eq $redisStorage "sentinel" -}}
+  {{- if not .Values.connections.redisSentinelNodes -}}
+    {{- fail "Redis Sentinel editor storage requires connections.redisSentinelNodes." -}}
+  {{- end -}}
+{{- else if eq $redisStorage "cluster" -}}
+  {{- if not .Values.connections.redisClusterNodes -}}
+    {{- fail "Redis Cluster editor storage requires connections.redisClusterNodes." -}}
+  {{- end -}}
+{{- else if eq $redisStorage "standalone" -}}
+  {{- if or .Values.connections.redisClusterNodes .Values.connections.redisSentinelNodes -}}
+    {{- fail "Standalone editor storage cannot be combined with Redis Cluster or Sentinel nodes." -}}
+  {{- end -}}
+{{- end -}}
+{{- if and (not .Values.connections.redisNoPass) (empty .Values.connections.redisPassword) (empty .Values.connections.redisExistingSecret) -}}
+  {{- fail "Authenticated Redis requires connections.redisPassword or connections.redisExistingSecret." -}}
+{{- end -}}
+true
+{{- end -}}
+
+{{/*
 Get the DB password secret
 */}}
 {{- define "ds.db.secretName" -}}
@@ -77,9 +127,9 @@ Return RabbitMQ password
 Get the Redis password secret
 */}}
 {{- define "ds.redis.secretName" -}}
-{{- if or .Values.connections.redisPassword .Values.connections.redisNoPass -}}
+{{- if and .Values.connections.redisPassword (not .Values.connections.redisNoPass) -}}
     {{- printf "%s-%s" .Release.Name (include "ds.resources.name" (list . .Values.commonNameSuffix "redis")) -}}
-{{- else if .Values.connections.redisExistingSecret -}}
+{{- else if and (not .Values.connections.redisNoPass) .Values.connections.redisExistingSecret -}}
     {{- printf "%s" (tpl .Values.connections.redisExistingSecret $) -}}
 {{- end -}}
 {{- end -}}
@@ -88,7 +138,7 @@ Get the Redis password secret
 Return true if a secret object should be created for Redis
 */}}
 {{- define "ds.redis.createSecret" -}}
-{{- if or .Values.connections.redisPassword .Values.connections.redisNoPass (not .Values.connections.redisExistingSecret) -}}
+{{- if or (and .Values.connections.redisPassword (not .Values.connections.redisNoPass)) (and (not .Values.connections.redisNoPass) (not .Values.connections.redisExistingSecret)) -}}
     {{- true -}}
 {{- end -}}
 {{- end -}}
@@ -110,9 +160,9 @@ Return Redis password
 Get the Redis Sentinel password secret
 */}}
 {{- define "ds.redis.sentinel.secretName" -}}
-{{- if or .Values.connections.redisSentinelPassword .Values.connections.redisSentinelNoPass -}}
+{{- if and .Values.connections.redisSentinelPassword (not .Values.connections.redisSentinelNoPass) -}}
     {{- printf "%s-%s" .Release.Name (include "ds.resources.name" (list . .Values.commonNameSuffix "redis-sentinel")) -}}
-{{- else if .Values.connections.redisSentinelExistingSecret -}}
+{{- else if and (not .Values.connections.redisSentinelNoPass) .Values.connections.redisSentinelExistingSecret -}}
     {{- printf "%s" (tpl .Values.connections.redisSentinelExistingSecret $) -}}
 {{- end -}}
 {{- end -}}
@@ -121,7 +171,7 @@ Get the Redis Sentinel password secret
 Return true if a secret object should be created for Redis Sentinel
 */}}
 {{- define "ds.redis.sentinel.createSecret" -}}
-{{- if or .Values.connections.redisSentinelPassword .Values.connections.redisSentinelNoPass (not .Values.connections.redisSentinelExistingSecret) -}}
+{{- if or (and .Values.connections.redisSentinelPassword (not .Values.connections.redisSentinelNoPass)) (and (not .Values.connections.redisSentinelNoPass) (not .Values.connections.redisSentinelExistingSecret)) -}}
     {{- true -}}
 {{- end -}}
 {{- end -}}
@@ -136,6 +186,24 @@ Return Redis Sentinel password
     {{- printf "" }}
 {{- else }}
     {{- required "A Redis Sentinel Password is required!" .Values.connections.redisSentinelPassword }}
+{{- end }}
+{{- end -}}
+
+{{/* Render only native Redis secret variables. Users are in the ConfigMap. */}}
+{{- define "ds.redis.env" -}}
+{{- if not .Values.connections.redisNoPass }}
+- name: REDIS_SERVER_PWD
+  valueFrom:
+    secretKeyRef:
+      name: {{ template "ds.redis.secretName" . }}
+      key: {{ .Values.connections.redisSecretKeyName }}
+{{- end }}
+{{- if and .Values.connections.redisSentinelNodes (not .Values.connections.redisSentinelNoPass) }}
+- name: REDIS_SENTINEL_PWD
+  valueFrom:
+    secretKeyRef:
+      name: {{ template "ds.redis.sentinel.secretName" . }}
+      key: {{ .Values.connections.redisSentinelSecretKeyName }}
 {{- end }}
 {{- end -}}
 

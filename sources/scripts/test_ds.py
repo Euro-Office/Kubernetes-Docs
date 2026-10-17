@@ -4,11 +4,19 @@ import subprocess
 import time
 import logging
 
-redisConnectorName = os.environ.get('REDIS_CONNECTOR_NAME')
 redisHost = os.environ.get('REDIS_SERVER_HOST')
 redisPort = os.environ.get('REDIS_SERVER_PORT')
 redisUser = os.environ.get('REDIS_SERVER_USER')
 redisPassword = os.environ.get('REDIS_SERVER_PWD')
+redisTLSOptions = (
+    {'ssl': True, 'ssl_cert_reqs': 'required'}
+    if os.environ.get('REDIS_SERVER_TLS') == 'true' else {}
+)
+redisSentinelTLSOptions = (
+    {'ssl': True, 'ssl_cert_reqs': 'required'}
+    if os.environ.get('REDIS_SENTINEL_TLS') == 'true' else {}
+)
+redisSentinelUser = os.environ.get('REDIS_SENTINEL_USER')
 redisSentinelPassword = os.environ.get('REDIS_SENTINEL_PWD')
 redisDBNum = os.environ.get('REDIS_SERVER_DB_NUM')
 redisConnectTimeout = 15
@@ -16,7 +24,7 @@ if os.environ.get('REDIS_CLUSTER_NODES'):
     redisClusterNodes = list(os.environ.get('REDIS_CLUSTER_NODES').split(" "))
     redisClusterNode = redisClusterNodes[0].split(":")[0]
     redisClusterPort = redisClusterNodes[0].split(":")[1]
-if redisConnectorName == 'ioredis':
+if os.environ.get('REDIS_SENTINEL_NODES'):
     redisSentinelGroupName = os.environ.get('REDIS_SENTINEL_GROUP_NAME')
     if os.environ.get('REDIS_SENTINEL_NODES'):
         redisSentinelNodes = list(os.environ.get('REDIS_SENTINEL_NODES').split(" "))
@@ -73,7 +81,8 @@ def get_redis_status():
             password=redisPassword,
             username=redisUser,
             socket_connect_timeout=redisConnectTimeout,
-            retry=retry_strategy
+            retry=retry_strategy,
+            **redisTLSOptions
         )
         rc.ping()
     except Exception as msg_redis:
@@ -98,7 +107,8 @@ def get_redis_cluster_status():
             username=redisUser,
             password=redisPassword,
             socket_connect_timeout=redisConnectTimeout,
-            retry=retry_strategy
+            retry=retry_strategy,
+            **redisTLSOptions
         )
         rc.ping()
     except Exception as msg_redis:
@@ -117,7 +127,12 @@ def get_redis_sentinel_status():
     retry_strategy = Retry(ExponentialBackoff(), retries=3)
     global rc
     try:
-        sentinel = Sentinel([(redisSentinelNode, redisSentinelPort)], socket_timeout=redisConnectTimeout, sentinel_kwargs={'password': redisSentinelPassword})
+        sentinel_kwargs = dict(redisSentinelTLSOptions)
+        if redisSentinelUser:
+            sentinel_kwargs['username'] = redisSentinelUser
+        if redisSentinelPassword:
+            sentinel_kwargs['password'] = redisSentinelPassword
+        sentinel = Sentinel([(redisSentinelNode, redisSentinelPort)], socket_timeout=redisConnectTimeout, sentinel_kwargs=sentinel_kwargs)
         master_host, master_port = sentinel.discover_master(redisSentinelGroupName)
         rc = redis.Redis(
             host=master_host,
@@ -126,7 +141,8 @@ def get_redis_sentinel_status():
             password=redisPassword,
             username=redisUser,
             socket_connect_timeout=redisConnectTimeout,
-            retry=retry_strategy
+            retry=retry_strategy,
+            **redisTLSOptions
         )
         rc.ping()
     except Exception as msg_redis:
@@ -154,14 +170,14 @@ def check_redis_key():
 
 def check_redis():
     logger_test_ds.info('Checking Redis availability...')
-    if redisConnectorName == 'redis' and not os.environ.get('REDIS_CLUSTER_NODES'):
-        if get_redis_status() is True:
+    if os.environ.get('REDIS_SENTINEL_NODES'):
+        if get_redis_sentinel_status() is True:
             check_redis_key()
-    elif redisConnectorName == 'redis' and os.environ.get('REDIS_CLUSTER_NODES'):
+    elif os.environ.get('REDIS_CLUSTER_NODES'):
         if get_redis_cluster_status() is True:
             check_redis_key()
-    elif redisConnectorName == 'ioredis':
-        if get_redis_sentinel_status() is True:
+    else:
+        if get_redis_status() is True:
             check_redis_key()
 
 
@@ -362,7 +378,7 @@ def total_status():
     logger_test_ds.info('As a result of the check, the following results were obtained:')
     for key, value in total_result.items():
         logger_test_ds.info(f'{key} = {value}')
-    if total_result['CheckDS'] != 'Success':
+    if any(value != 'Success' for value in total_result.values()):
         sys.exit(1)
 
 
@@ -375,4 +391,3 @@ if storageS3 == 'false':
     check_dir_access()
 get_ds_status()
 total_status()
-

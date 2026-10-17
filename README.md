@@ -389,6 +389,133 @@ The `helm delete` command removes all the Kubernetes components associated with 
 
 ### 4. Parameters
 
+#### Editor data and statistics storage
+
+`docservice.editorDataStorage` and `docservice.editorStatStorage` select the
+storage module for editor data and editor statistics independently. Either
+setting may use `memory` while the other uses Redis:
+
+```yaml
+docservice:
+  editorDataStorage: memory
+  editorStatStorage: standalone
+```
+
+The supported combinations are both settings using `memory`, one setting
+using `memory` and the other using one Redis topology, or both settings using
+the same Redis topology. Standalone, Sentinel, and Cluster cannot be combined
+with each other because both settings share one `editorDataRedis` connection.
+The chart maps each Redis-backed setting to `editorDataRedis`.
+
+These combinations are valid:
+
+```yaml
+docservice:
+  editorDataStorage: cluster
+  editorStatStorage: cluster
+```
+
+```yaml
+docservice:
+  editorDataStorage: sentinel
+  editorStatStorage: memory
+```
+
+This combination is invalid because it requests two different Redis
+topologies from one shared connection:
+
+```yaml
+docservice:
+  editorDataStorage: standalone
+  editorStatStorage: cluster
+```
+
+When `editorStatStorage` is not explicitly configured, DocumentServer uses
+the editor data storage module for statistics as well. Configure only the
+Redis topology required by the selected mode: `redisHost` and `redisPort` for
+standalone, `redisClusterNodes` for cluster, or `redisSentinelNodes` for
+Sentinel. Cluster and Sentinel cannot be configured together.
+
+#### Redis TLS
+
+`connections.redisTLS` enables TLS for standalone Redis, Cluster connections,
+and Redis nodes discovered through Sentinel. `connections.redisSentinelTLS`
+enables TLS for Sentinel discovery independently. Both default to `false`:
+
+```yaml
+connections:
+  redisTLS: true
+  redisSentinelTLS: false
+```
+
+These values render as the quoted `REDIS_SERVER_TLS` and
+`REDIS_SENTINEL_TLS` environment variables. Use a DocumentServer image containing
+the TLS changes in both the standalone and orchestrated entrypoints; older
+images do not support these flags. `REDIS_SERVER_TLS=true` enables
+`options.socket.tls`, `optionsSentinel.nodeClientOptions.socket.tls`, and
+`optionsCluster.defaults.socket.tls`, with `rediss://` Cluster seed URLs.
+`REDIS_SENTINEL_TLS=true` enables
+`optionsSentinel.sentinelClientOptions.socket.tls` independently.
+
+The flags accept `true`/`false`; unset or empty environment values behave as
+`false` without injecting TLS options. TLS does not change the configured
+ports, and certificate verification stays enabled. Custom certificates and
+mutual TLS are outside these values; existing mounted configuration remains
+available for those settings.
+
+#### Redis authentication secrets
+
+When using an existing Redis Secret, set `connections.redisExistingSecret`.
+The Secret must contain the key configured by
+`connections.redisSecretKeyName`, which defaults to `redis-password`:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis
+type: Opaque
+stringData:
+  redis-password: your-redis-password
+```
+
+Redis Sentinel authentication has two independent layers: Redis-node
+authentication and Sentinel authentication. If both are protected, configure
+both `connections.redisExistingSecret`/`connections.redisUser` and
+`connections.redisSentinelExistingSecret`/`connections.redisSentinelUser`.
+The Redis Secret supplies the node password, while the Sentinel Secret
+supplies the Sentinel ACL password.
+
+For the Sentinel ACL credentials, set
+`connections.redisSentinelExistingSecret` and
+`connections.redisSentinelUser`. The Secret must contain the key configured by
+`connections.redisSentinelSecretKeyName`, which defaults to
+`sentinel-password`:
+
+```yaml
+connections:
+  redisSentinelExistingSecret: redis-sentinel
+  redisSentinelSecretKeyName: sentinel-password
+  redisSentinelUser: sentinel-user
+  redisSentinelNoPass: false
+```
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-sentinel
+type: Opaque
+stringData:
+  sentinel-password: your-sentinel-password
+```
+
+The Secrets must be in the namespace where the chart is installed. Set
+`connections.redisNoPass: true` when Redis nodes do not require a password, or
+`connections.redisSentinelNoPass: true` when Sentinel does not require ACL
+credentials. Only the corresponding credentials are omitted; the other layer
+can still remain authenticated.
+
 | Parameter                                                   | Description                                                                                                                                                                    | Default                                                                                   |
 |-------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------|
 | `connections.dbType`                                        | The database type. Possible values are `postgres`, `mariadb`, `mysql`, `oracle`, `mssql` or `dameng`                                                                           | `postgres`                                                                                |
@@ -399,22 +526,24 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `connections.dbPassword`                                    | Database user password. If set to, it takes priority over the `connections.dbExistingSecret`                                                                                   | `""`                                                                                      |
 | `connections.dbSecretKeyName`                               | The name of the key that contains the Database user password                                                                                                                   | `postgres-password`                                                                       |
 | `connections.dbExistingSecret`                              | Name of existing secret to use for Database passwords. Must contain the key specified in `connections.dbSecretKeyName`                                                         | `postgresql`                                                                              |
-| `connections.redisConnectorName`                            | Defines which connector to use to connect to Redis. If you need to connect to Redis Sentinel, set the value `ioredis`                                                          | `redis`                                                                                   |
-| `connections.redistHost`                                    | The IP address or the name of the Redis host. Not used if the values are set in `connections.redisClusterNodes` and `connections.redisSentinelNodes`                           | `redis-master`                                                                            |
-| `connections.redisPort`                                     | The Redis server port number. Not used if the values are set in `connections.redisClusterNodes` and `connections.redisSentinelNodes`                                           | `6379`                                                                                    |
-| `connections.redisUser`                                     | The Redis [user](https://redis.io/docs/management/security/acl/) name. The value in this parameter overrides the value set in the `options` object in `local.json` if you add custom configuration file | `default`                                                        |
+| `connections.redisHost`                                     | Redis host, or the reachable startup/readiness fallback endpoint when a topology is configured                                                                                 | `redis-master`                                                                            |
+| `connections.redisPort`                                     | Redis port used with `connections.redisHost` for the standalone/startup fallback endpoint                                                                                       | `6379`                                                                                    |
+| `connections.redisTLS`                                     | Enable TLS for standalone Redis, Cluster, and Sentinel-discovered Redis nodes. Requires a DocumentServer image with TLS entrypoint support.                                | `false`                                                                                   |
+| `connections.redisUser`                                     | Redis [user](https://redis.io/docs/management/security/acl/) name. Omitted when `connections.redisNoPass` is `true`                                                            | `default`                                                                                |
 | `connections.redisDBNum`                                    | Number of the redis logical database to be [selected](https://redis.io/commands/select/). The value in this parameter overrides the value set in the `options` object in `local.json` if you add custom configuration file | `0`                                           |
 | `connections.redisClusterNodes`                             | List of nodes in the Redis cluster. There is no need to specify every node in the cluster, 3 should be enough. You can specify multiple values. It must be specified in the `host:port` format | `[]`                                                                      |
 | `connections.redisPassword`                                 | The password set for the Redis account. If set to, it takes priority over the `connections.redisExistingSecret`. The value in this parameter overrides the value set in the `options` object in `local.json` if you add custom configuration file | `""`                   |
 | `connections.redisSecretKeyName`                            | The name of the key that contains the Redis user password                                                                                                                      | `redis-password`                                                                          |
 | `connections.redisExistingSecret`                           | Name of existing secret to use for Redis passwords. Must contain the key specified in `connections.redisSecretKeyName`. The password from this secret overrides password set in the `options` object in `local.json` | `redis`                                             |
 | `connections.redisNoPass`                                   | Defines whether to use a Redis auth without a password. If the connection to Redis server does not require a password, set the value to `true`                                 | `false`                                                                                   |
-| `connections.redisSentinelNodes`                            | List of Redis Sentinel Nodes. There is no need to specify every node, 3 should be enough. You can specify multiple values. It must be specified in the `host:port` format. Used if `connections.redisConnectorName` is set to `ioredis` | `[]`                             |
-| `connections.redisSentinelGroupName`                        | Name of a group of Redis instances composed of a master and one or more slaves. Used if `connections.redisConnectorName` is set to `ioredis`                                   | `mymaster`                                                                                |
-| `connections.redisSentinelExistingSecret`                   | Name of existing secret to use for Redis Sentinel password. Must contain the key specified in `connections.redisSentinelSecretKeyName`. The password from this secret overrides the value for the password set in the `iooptions` object in `local.json` | ""              |
+| `connections.redisSentinelNodes`                            | List of Redis Sentinel Nodes. Sentinel mode is enabled when this list is non-empty. There is no need to specify every node, 3 should be enough. It must use the `host:port` format | `[]`                             |
+| `connections.redisSentinelGroupName`                        | Name of the Sentinel-monitored Redis group.                                                                                                                                    | `mymaster`                                                                                |
+| `connections.redisSentinelTLS`                             | Enable TLS for Sentinel discovery independently of `connections.redisTLS`. Requires a DocumentServer image with TLS entrypoint support.                                    | `false`                                                                                   |
+| `connections.redisSentinelUser`                             | Redis Sentinel ACL user name. Required together with a password when Sentinel authentication is enabled.                                                                        | `""`                                                                                     |
+| `connections.redisSentinelExistingSecret`                   | Name of existing secret to use for Redis Sentinel password. Must contain the key specified in `connections.redisSentinelSecretKeyName`. The password overrides `optionsSentinel` in `local.json` | `""`              |
 | `connections.redisSentinelSecretKeyName`                    | The name of the key that contains the Redis Sentinel user password. If you set a password in `redisSentinelPassword`, a secret will be automatically created, the key name of which will be the value set here | `sentinel-password`                                       |
-| `connections.redisSentinelPassword`                         | The password set for the Redis Sentinel account. If set to, it takes priority over the `connections.redisSentinelExistingSecret`. The value in this parameter overrides the value set in the `iooptions` object in `local.json` | `""`                                     |
-| `connections.redisSentinelNoPass`                           | Defines whether to use a Redis Sentinel auth without a password. If the connection to Redis Sentinel does not require a password, set the value to `true`                      | `true`                                                                                    |
+| `connections.redisSentinelPassword`                         | The password set for the Redis Sentinel account. If set, it takes priority over `connections.redisSentinelExistingSecret` and overrides the `optionsSentinel` password in `local.json` | `""`                                     |
+| `connections.redisSentinelNoPass`                           | If `true`, omit Sentinel ACL credentials. If `false`, both `connections.redisSentinelUser` and a Sentinel password are required.                                                  | `true`                                                                                    |
 | `connections.amqpType`                                      | Defines the AMQP server type. Possible values are `rabbitmq` or `activemq`                                                                                                     | `rabbitmq`                                                                                |
 | `connections.amqpHost`                                      | The IP address or the name of the AMQP server                                                                                                                                  | `rabbitmq`                                                                                |
 | `connections.amqpPort`                                      | The port for the connection to AMQP server                                                                                                                                     | `5672`                                                                                    |
@@ -484,6 +613,8 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `customPlugins.defaultPlugins.list`                         | Defines [which plugins](./CUSTOM_RESOURCES.md#install-selected-default-plugins-only) from the default list will be installed on the server and in the `Plugins` menu. It is executed if the `customPlugins.build` is set to `true`          | `[]`                         |
 | `customPlugins.emptyPluginsDir`                             | Defines whether a directory with plugins in containers will [contain files](./CUSTOM_RESOURCES.md#completely-disable-plugins-directory), including service files. If set to `true`, an empty volume with the `emptyDir` type will be mapped  | `false`                     |
 | `images.tag`                                                | Global image tag for all Euro-Office Docs services and jobs                                                                                                                     | `9.3.1-1`                                                                                 |
+| `docservice.editorDataStorage`                              | Editor data storage mode. Can differ from `docservice.editorStatStorage`; possible values are `memory`, `standalone`, `sentinel` or `cluster`. Redis-backed modes use the shared `editorDataRedis` connection. | `memory` |
+| `docservice.editorStatStorage`                              | Editor statistics storage mode. If omitted, it follows `docservice.editorDataStorage`; Redis-backed modes must use the same topology as editor data. | `editorDataStorage` |
 | `docservice.annotations`                                    | Defines annotations that will be additionally added to Docservice Deployment. If set to, it takes priority over the `commonAnnotations`                                        | `{}`                                                                                      |
 | `docservice.podAnnotations`                                 | Map of annotations to add to the Docservice deployment pods                                                                                                                    | `rollme: "{{ randAlphaNum 5 \| quote }}"`                                                 |
 | `docservice.replicas`                                       | Docservice replicas quantity. If the `docservice.autoscaling.enabled` parameter is enabled, it is ignored                                                                      | `2`                                                                                       |
@@ -821,7 +952,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `customResources.job.containerSecurityContext.enabled`      | Enable security context for the Custom Resources container                                                                                                                     | `false`                                                                                   |
 | `customResources.job.resources.requests`                    | The requested resources for the job Custom Resources container                                                                                                                 | `{}`                                                                                      |
 | `customResources.job.resources.limits`                      | The resources limits for the job Custom Resources container                                                                                                                    | `{}`                                                                                      |
-| `tests.enabled`                                             | Enable the resources creation necessary for Euro-Office Docs launch testing and connected dependencies availability testing. These resources will be used when running the `helm test` command | `true`                                                                     |
+| `tests.enabled`                                             | Enable launch/dependency test resources. `helm test` checks Redis, the other dependencies, the native Sentinel `NODE_CONFIG` (when Sentinel storage is selected), and the DocumentServer health endpoint; any failed check fails the test. | `true`                                                                     |
 | `tests.annotations`                                         | Defines annotations that will be additionally added to Test Pod. If set to, it takes priority over the `commonAnnotations`                                                     | `{}`                                                                                      |
 | `tests.customPodAntiAffinity`                               | Prohibiting the scheduling of Test Pod relative to other Pods containing the specified labels on the same node                                                                 | `{}`                                                                                      |
 | `tests.podAffinity`                                         | Defines [Pod affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity) rules for Test Pod scheduling by nodes relative to other Pods | `{}`                                                                 |

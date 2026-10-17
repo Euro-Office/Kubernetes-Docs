@@ -1,0 +1,19 @@
+# Apply together with my-values.yml after providing a reachable Redis Sentinel
+# deployment. This file does not deploy Sentinel itself.
+#
+# helm install docs .. -n euro-office -f my-values.yml -f my-values.redis-sentinel.yml
+
+docservice:
+  editorDataStorage: sentinel
+  editorStatStorage: sentinel
+
+connections:
+  # Fallback/startup endpoint. Sentinel discovery uses redisSentinelNodes.
+  redisHost: redis-sentinel.euro-office.svc.cluster.local
+  redisPort: 26379
+  redisSentinelNodes:
+    - redis-sentinel-0.euro-office.svc.cluster.local:26379
+    - redis-sentinel-1.euro-office.svc.cluster.local:26379
+    - redis-sentinel-2.euro-office.svc.cluster.local:26379
+  redisSentinelGroupName: mymaster
+  redisSentinelNoPass: true

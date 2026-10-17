@@ -1,0 +1,13 @@
+{{- if and .Values.tests.enabled (or (or (eq (default "memory" .Values.docservice.editorDataStorage) "sentinel") (eq (default "memory" .Values.docservice.editorStatStorage) "sentinel")) (or (eq (default "memory" .Values.docservice.editorDataStorage) "cluster") (eq (default "memory" .Values.docservice.editorStatStorage) "cluster"))) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "test-redis-config") }}
+  namespace: {{ include "ds.namespace" . | quote }}
+  {{- if .Values.commonLabels }}
+  labels:
+    {{- include "ds.labels.commonLabels" . | trim | nindent 4 }}
+  {{- end }}
+data:
+{{ (.Files.Glob "sources/scripts/test_redis_config.sh").AsConfig | indent 2 }}
+{{- end }}

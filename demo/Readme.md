@@ -100,7 +100,7 @@ kubectl apply -f redis.yaml
 kubectl apply -f rabbitmq.yaml
 kubectl apply -f storage.yaml
 
-# Wait for all four to be Running
+# Wait for the three dependency pods to be Running
 kubectl get pods -n euro-office -w
 ```
 
@@ -110,7 +110,7 @@ Verify connectivity before installing the chart:
 # Postgres
 kubectl run pgtest --rm -it --restart=Never -n euro-office \
   --image=postgres:16 -- \
-  psql "postgresql://onlyoffice:onlyoffice@pg-postgresql:5432/onlyoffice" -c "SELECT 1;"
+  psql "postgresql://eurooffice:eurooffice@pg-postgresql:5432/eurooffice" -c "SELECT 1;"
 
 # Redis
 kubectl run redistest --rm -it --restart=Never -n euro-office \
@@ -135,7 +135,7 @@ Expected sequence:
 3. `converter-*` → 1/1 Running
 4. `docservice-*` → 2/2 Running (docservice + proxy sidecar)
 5. `example-0` → 1/1 Running
-5. `adminpanel-0` → 1/1 Running
+6. `adminpanel-0` → 1/1 Running
 
 Press Ctrl-C once everything reads Running or Completed.
 
@@ -211,6 +211,10 @@ sudo rm -rf /tmp/euro-office-shared
 - `rabbitmq.yaml` — RabbitMQ deployment, service, and secret
 - `storage.yaml` — `nfs` StorageClass and static PVs backed by the host-mounted shared directory
 - `my-values.yml` — Helm chart overrides (image references, connection URLs, JWT secret, env vars)
+- `my-values.redis-standalone.yml` — enables Redis for both editor data and statistics using standalone Redis
+- `my-values.redis-data-only.yml` — enables Redis for editor data while keeping statistics in memory
+- `my-values.redis-sentinel.yml` — Sentinel configuration overlay for an external Redis Sentinel deployment
+- `my-values.redis-cluster.yml` — Cluster configuration overlay for an external Redis Cluster deployment
 
 ## Limitations
 
@@ -220,3 +224,28 @@ This setup is for local testing only:
 - The shared host volume at `/tmp/euro-office-shared` only works because k3d nodes run on a single host; in a real cluster, replace `storage.yaml` with proper NFS or another RWX provisioner
 - Single-replica databases with no backups
 - No TLS, no ingress, port-forwarding only
+
+## Redis editor-storage examples
+
+The base `my-values.yml` leaves both editor stores in their default `memory`
+mode. Apply one of the overlays together with the base values file to select a
+Redis topology. Only one Redis topology may be configured at a time.
+
+The standalone overlay works with the `redis.yaml` manifest included here:
+
+```bash
+helm install docs .. -n euro-office \
+  -f my-values.yml -f my-values.redis-standalone.yml --timeout 10m
+```
+
+The data-only overlay demonstrates that the two storage modules can be chosen
+independently:
+
+```bash
+helm install docs .. -n euro-office \
+  -f my-values.yml -f my-values.redis-data-only.yml --timeout 10m
+```
+
+The Sentinel and Cluster overlays contain example node names and require an
+external topology with those names, or equivalent values edited for the target
+environment. They do not deploy Sentinel or Cluster resources.
