@@ -18,6 +18,8 @@ data:
   {{- end }}
   {{- if ne (default (default "memory" .Values.docservice.editorDataStorage) .Values.docservice.editorStatStorage) "memory" }}
   EDITOR_STAT_STORAGE: editorDataRedis
+  {{- else if eq .Values.docservice.editorStatStorage "memory" }}
+  EDITOR_STAT_STORAGE: editorDataMemory
   {{- end }}
   DB_TYPE: {{ template "ds.db.type" . }}
   DB_USER: {{ .Values.connections.dbUser }}
@@ -26,6 +28,8 @@ data:
   DB_NAME: {{ .Values.connections.dbName }}
   REDIS_SERVER_HOST: {{ .Values.connections.redisHost }}
   REDIS_SERVER_PORT: {{ .Values.connections.redisPort | quote }}
+  REDIS_SERVER_TLS: {{ .Values.connections.redisTLS | quote }}
+  REDIS_SENTINEL_TLS: {{ .Values.connections.redisSentinelTLS | quote }}
   REDIS_CONNECTOR_NAME: redis
   {{- if not .Values.connections.redisNoPass }}
   REDIS_SERVER_USER: {{ .Values.connections.redisUser | quote }}

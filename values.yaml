@@ -38,6 +38,9 @@ connections:
   ## connections.redisPort The Redis server port number
   ## Used with connections.redisHost for the standalone/startup fallback endpoint.
   redisPort: "6379"
+  ## connections.redisTLS Enable TLS for standalone Redis, Cluster, and Sentinel-discovered Redis nodes
+  ## Requires a DocumentServer image supporting REDIS_SERVER_TLS. Ports remain unchanged.
+  redisTLS: false
   ## connections.redisUser The Redis user name
   ## ref: https://redis.io/docs/management/security/acl/
   ## Omit Redis authentication by setting connections.redisNoPass to true.
@@ -83,6 +86,9 @@ connections:
   ## connections.redisSentinelGroupName Name of a group of Redis instances composed of a master and one or more slaves
   ## Redis Sentinel is enabled when `connections.redisSentinelNodes` is not empty
   redisSentinelGroupName: mymaster
+  ## connections.redisSentinelTLS Enable TLS for Sentinel discovery independently of connections.redisTLS
+  ## Requires a DocumentServer image supporting REDIS_SENTINEL_TLS. Ports remain unchanged.
+  redisSentinelTLS: false
   ## connections.redisSentinelUser The Redis Sentinel user name
   ## Required together with a password when Sentinel ACL authentication is enabled.
   redisSentinelUser: ""
@@ -505,7 +511,8 @@ docservice:
   ## Possible values are `memory`, `standalone`, `sentinel` or `cluster`.
   editorDataStorage: memory
   ## docservice.editorStatStorage Editor statistics storage mode. If omitted,
-  ## statistics use the editorDataStorage module. If both
+  ## statistics use the editorDataStorage module. Set explicitly to `memory`
+  ## to keep statistics in memory when editor data uses Redis. If both
   ## settings use Redis, they must use the same topology because they share
   ## the editorDataRedis connection. Different Redis topologies are not
   ## supported.

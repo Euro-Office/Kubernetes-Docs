@@ -436,6 +436,33 @@ Redis topology required by the selected mode: `redisHost` and `redisPort` for
 standalone, `redisClusterNodes` for cluster, or `redisSentinelNodes` for
 Sentinel. Cluster and Sentinel cannot be configured together.
 
+#### Redis TLS
+
+`connections.redisTLS` enables TLS for standalone Redis, Cluster connections,
+and Redis nodes discovered through Sentinel. `connections.redisSentinelTLS`
+enables TLS for Sentinel discovery independently. Both default to `false`:
+
+```yaml
+connections:
+  redisTLS: true
+  redisSentinelTLS: false
+```
+
+These values render as the quoted `REDIS_SERVER_TLS` and
+`REDIS_SENTINEL_TLS` environment variables. Use a DocumentServer image containing
+the TLS changes in both the standalone and orchestrated entrypoints; older
+images do not support these flags. `REDIS_SERVER_TLS=true` enables
+`options.socket.tls`, `optionsSentinel.nodeClientOptions.socket.tls`, and
+`optionsCluster.defaults.socket.tls`, with `rediss://` Cluster seed URLs.
+`REDIS_SENTINEL_TLS=true` enables
+`optionsSentinel.sentinelClientOptions.socket.tls` independently.
+
+The flags accept `true`/`false`; unset or empty environment values behave as
+`false` without injecting TLS options. TLS does not change the configured
+ports, and certificate verification stays enabled. Custom certificates and
+mutual TLS are outside these values; existing mounted configuration remains
+available for those settings.
+
 #### Redis authentication secrets
 
 When using an existing Redis Secret, set `connections.redisExistingSecret`.
@@ -501,6 +528,7 @@ can still remain authenticated.
 | `connections.dbExistingSecret`                              | Name of existing secret to use for Database passwords. Must contain the key specified in `connections.dbSecretKeyName`                                                         | `postgresql`                                                                              |
 | `connections.redisHost`                                     | Redis host, or the reachable startup/readiness fallback endpoint when a topology is configured                                                                                 | `redis-master`                                                                            |
 | `connections.redisPort`                                     | Redis port used with `connections.redisHost` for the standalone/startup fallback endpoint                                                                                       | `6379`                                                                                    |
+| `connections.redisTLS`                                     | Enable TLS for standalone Redis, Cluster, and Sentinel-discovered Redis nodes. Requires a DocumentServer image with TLS entrypoint support.                                | `false`                                                                                   |
 | `connections.redisUser`                                     | Redis [user](https://redis.io/docs/management/security/acl/) name. Omitted when `connections.redisNoPass` is `true`                                                            | `default`                                                                                |
 | `connections.redisDBNum`                                    | Number of the redis logical database to be [selected](https://redis.io/commands/select/). The value in this parameter overrides the value set in the `options` object in `local.json` if you add custom configuration file | `0`                                           |
 | `connections.redisClusterNodes`                             | List of nodes in the Redis cluster. There is no need to specify every node in the cluster, 3 should be enough. You can specify multiple values. It must be specified in the `host:port` format | `[]`                                                                      |
@@ -510,6 +538,7 @@ can still remain authenticated.
 | `connections.redisNoPass`                                   | Defines whether to use a Redis auth without a password. If the connection to Redis server does not require a password, set the value to `true`                                 | `false`                                                                                   |
 | `connections.redisSentinelNodes`                            | List of Redis Sentinel Nodes. Sentinel mode is enabled when this list is non-empty. There is no need to specify every node, 3 should be enough. It must use the `host:port` format | `[]`                             |
 | `connections.redisSentinelGroupName`                        | Name of the Sentinel-monitored Redis group.                                                                                                                                    | `mymaster`                                                                                |
+| `connections.redisSentinelTLS`                             | Enable TLS for Sentinel discovery independently of `connections.redisTLS`. Requires a DocumentServer image with TLS entrypoint support.                                    | `false`                                                                                   |
 | `connections.redisSentinelUser`                             | Redis Sentinel ACL user name. Required together with a password when Sentinel authentication is enabled.                                                                        | `""`                                                                                     |
 | `connections.redisSentinelExistingSecret`                   | Name of existing secret to use for Redis Sentinel password. Must contain the key specified in `connections.redisSentinelSecretKeyName`. The password overrides `optionsSentinel` in `local.json` | `""`              |
 | `connections.redisSentinelSecretKeyName`                    | The name of the key that contains the Redis Sentinel user password. If you set a password in `redisSentinelPassword`, a secret will be automatically created, the key name of which will be the value set here | `sentinel-password`                                       |

@@ -8,6 +8,14 @@ redisHost = os.environ.get('REDIS_SERVER_HOST')
 redisPort = os.environ.get('REDIS_SERVER_PORT')
 redisUser = os.environ.get('REDIS_SERVER_USER')
 redisPassword = os.environ.get('REDIS_SERVER_PWD')
+redisTLSOptions = (
+    {'ssl': True, 'ssl_cert_reqs': 'required'}
+    if os.environ.get('REDIS_SERVER_TLS') == 'true' else {}
+)
+redisSentinelTLSOptions = (
+    {'ssl': True, 'ssl_cert_reqs': 'required'}
+    if os.environ.get('REDIS_SENTINEL_TLS') == 'true' else {}
+)
 redisSentinelUser = os.environ.get('REDIS_SENTINEL_USER')
 redisSentinelPassword = os.environ.get('REDIS_SENTINEL_PWD')
 redisDBNum = os.environ.get('REDIS_SERVER_DB_NUM')
@@ -73,7 +81,8 @@ def get_redis_status():
             password=redisPassword,
             username=redisUser,
             socket_connect_timeout=redisConnectTimeout,
-            retry=retry_strategy
+            retry=retry_strategy,
+            **redisTLSOptions
         )
         rc.ping()
     except Exception as msg_redis:
@@ -98,7 +107,8 @@ def get_redis_cluster_status():
             username=redisUser,
             password=redisPassword,
             socket_connect_timeout=redisConnectTimeout,
-            retry=retry_strategy
+            retry=retry_strategy,
+            **redisTLSOptions
         )
         rc.ping()
     except Exception as msg_redis:
@@ -117,7 +127,7 @@ def get_redis_sentinel_status():
     retry_strategy = Retry(ExponentialBackoff(), retries=3)
     global rc
     try:
-        sentinel_kwargs = {}
+        sentinel_kwargs = dict(redisSentinelTLSOptions)
         if redisSentinelUser:
             sentinel_kwargs['username'] = redisSentinelUser
         if redisSentinelPassword:
@@ -131,7 +141,8 @@ def get_redis_sentinel_status():
             password=redisPassword,
             username=redisUser,
             socket_connect_timeout=redisConnectTimeout,
-            retry=retry_strategy
+            retry=retry_strategy,
+            **redisTLSOptions
         )
         rc.ping()
     except Exception as msg_redis:

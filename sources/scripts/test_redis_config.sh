@@ -37,10 +37,22 @@ check_config() {
   local node_config="$2"
   local node_auth="$3"
   local sentinel_auth="$4"
+  local node_tls="${5:-${REDIS_SERVER_TLS:-false}}"
+  local sentinel_tls="${6:-${REDIS_SENTINEL_TLS:-false}}"
+  local scheme=redis
+  [[ "$node_tls" != true ]] || scheme=rediss
 
-  printf '%s' "$node_config" | jq -e '
-  .services.CoAuthoring.server.editorDataStorage == "editorDataRedis" and
-  .services.CoAuthoring.server.editorStatStorage == "editorDataRedis" and
+  printf '%s' "$node_config" | jq -e --argjson tls "$( [[ "$node_tls" == true ]] && echo true || echo false )" '
+  .services.CoAuthoring.redis.options.socket |
+  (if $tls then .tls == true else has("tls") | not end) and
+  .rejectUnauthorized != false
+  ' >/dev/null || fail "$name: standalone/fallback TLS options are incorrect"
+
+  printf '%s' "$node_config" | jq -e \
+    --arg data_storage "${EDITOR_DATA_STORAGE:-editorDataMemory}" \
+    --arg stat_storage "${EDITOR_STAT_STORAGE:-${EDITOR_DATA_STORAGE:-editorDataMemory}}" '
+  (.services.CoAuthoring.server.editorDataStorage // "editorDataMemory") == $data_storage and
+  (.services.CoAuthoring.server.editorStatStorage // $data_storage) == $stat_storage and
   .services.CoAuthoring.redis.name == "redis"
 ' >/dev/null || fail "$name: NODE_CONFIG does not select the native Redis backend"
 
@@ -52,6 +64,17 @@ check_config() {
     (.services.CoAuthoring.redis.optionsSentinel.nodeClientOptions.database == ($db | tonumber)) and
     ((.services.CoAuthoring.redis.optionsCluster.rootNodes // []) | length) == 0
     ' >/dev/null || fail "$name: NODE_CONFIG does not contain the expected native Sentinel configuration"
+
+    printf '%s' "$node_config" | jq -e \
+      --argjson node_tls "$( [[ "$node_tls" == true ]] && echo true || echo false )" \
+      --argjson sentinel_tls "$( [[ "$sentinel_tls" == true ]] && echo true || echo false )" '
+    def check_tls($enabled):
+      .socket | (if $enabled then .tls == true else has("tls") | not end) and
+      .rejectUnauthorized != false;
+    .services.CoAuthoring.redis.optionsSentinel |
+    (.nodeClientOptions | check_tls($node_tls)) and
+    (.sentinelClientOptions | check_tls($sentinel_tls))
+    ' >/dev/null || fail "$name: Redis node and Sentinel TLS options are incorrect"
 
     if [[ "$node_auth" == true ]]; then
       printf '%s' "$node_config" | jq -e '
@@ -72,15 +95,21 @@ check_config() {
       ' >/dev/null || fail "$name: authenticated Sentinel options are incomplete"
     else
       printf '%s' "$node_config" | jq -e '
-      .services.CoAuthoring.redis.optionsSentinel.sentinelClientOptions == {}
+      (.services.CoAuthoring.redis.optionsSentinel.sentinelClientOptions | del(.socket)) == {}
       ' >/dev/null || fail "$name: unauthenticated Sentinel options are not empty"
     fi
   else
-    printf '%s' "$node_config" | jq -e --arg nodes "$REDIS_CLUSTER_NODES" '
+    printf '%s' "$node_config" | jq -e --arg nodes "$REDIS_CLUSTER_NODES" --arg scheme "$scheme" '
     (.services.CoAuthoring.redis.optionsCluster.rootNodes |
-      map(.url) == ($nodes | split(" ") | map("redis://" + .))) and
+      map(.url) == ($nodes | split(" ") | map($scheme + "://" + .))) and
     ((.services.CoAuthoring.redis.optionsSentinel // {}) | length) == 0
     ' >/dev/null || fail "$name: NODE_CONFIG does not contain the expected native Cluster configuration"
+
+    printf '%s' "$node_config" | jq -e --argjson tls "$( [[ "$node_tls" == true ]] && echo true || echo false )" '
+    .services.CoAuthoring.redis.optionsCluster.defaults.socket |
+    (if $tls then .tls == true else has("tls") | not end) and
+    .rejectUnauthorized != false
+    ' >/dev/null || fail "$name: Cluster TLS options are incorrect"
 
     if [[ "$node_auth" == true ]]; then
       printf '%s' "$node_config" | jq -e '
@@ -117,5 +146,18 @@ else
   check_config "authenticated Cluster" \
     "$(render_config REDIS_SERVER_USER=default REDIS_SERVER_PWD=redis-test)" true false
 fi
+
+# Exercise TLS independently, including the entrypoint's empty/unset defaults.
+# Authentication is omitted here so TLS-only Sentinel options are also checked.
+for node_tls in true false empty unset; do
+  for sentinel_tls in true false empty unset; do
+    tls_env=(-u REDIS_SERVER_TLS -u REDIS_SENTINEL_TLS)
+    [[ "$node_tls" == unset ]] || tls_env+=("REDIS_SERVER_TLS=${node_tls/empty/}")
+    [[ "$sentinel_tls" == unset ]] || tls_env+=("REDIS_SENTINEL_TLS=${sentinel_tls/empty/}")
+    check_config "Redis TLS=$node_tls, Sentinel TLS=$sentinel_tls" \
+      "$(render_config "${tls_env[@]}" REDIS_SERVER_USER= REDIS_SERVER_PWD= REDIS_SENTINEL_USER= REDIS_SENTINEL_PWD=)" \
+      false false "$node_tls" "$sentinel_tls"
+  done
+done
 
 echo "Redis native $topology configuration is valid"
