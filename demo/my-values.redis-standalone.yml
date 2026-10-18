@@ -1,0 +1,6 @@
+# Apply together with my-values.yml:
+# helm install docs .. -n euro-office -f my-values.yml -f my-values.redis-standalone.yml
+
+docservice:
+  editorDataStorage: standalone
+  editorStatStorage: standalone

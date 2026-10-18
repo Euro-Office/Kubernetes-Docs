@@ -1,5 +1,5 @@
 
-# Skip the demo app
+# Enable the demo app
 example:
   enabled: true
   dsUrl: "http://localhost:8082/"
@@ -23,7 +23,6 @@ connections:
   dbUser: eurooffice
   dbPassword: eurooffice
 
-  redisConnectorName: ioredis
   redisHost: redis-master.euro-office.svc.cluster.local
   redisPort: 6379
   redisPassword: redis

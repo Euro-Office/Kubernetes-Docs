@@ -70,22 +70,15 @@ spec:
         secretKeyRef:
           name: {{ template "ds.rabbitmq.secretName" . }}
           key: {{ .Values.connections.amqpSecretKeyName }}
-    - name: REDIS_SERVER_PWD
-      valueFrom:
-        secretKeyRef:
-          name: {{ template "ds.redis.secretName" . }}
-          key: {{ .Values.connections.redisSecretKeyName }}
-    {{- if eq .Values.connections.redisConnectorName "ioredis" }}
-    - name: REDIS_SENTINEL_PWD
-      valueFrom:
-        secretKeyRef:
-          name: {{ template "ds.redis.sentinel.secretName" . }}
-          key: {{ .Values.connections.redisSentinelSecretKeyName }}
-    {{- end }}
+    {{ include "ds.redis.env" . | nindent 4 }}
     - name: STORAGE_S3
       value: {{ .Values.persistence.storageS3 | quote }}
     - name: DS_ADDRESS
       value: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "docservice") }}
+    {{ include "ds.redis.ca.testEnv" . | nindent 4 }}
+    {{- with .Values.tests.extraEnvVars }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
     envFrom:
     - configMapRef:
         name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "documentserver") }}
@@ -97,6 +90,10 @@ spec:
     - name: test-ds
       mountPath: /scripts/test_ds.py
       subPath: test_ds.py
+    {{ include "ds.redis.ca.mount" . | nindent 4 }}
+    {{- with .Values.tests.extraVolumeMounts }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
     command: ['python', '/scripts/test_ds.py']
   volumes:
   {{- if not .Values.persistence.storageS3 }}
@@ -108,5 +105,9 @@ spec:
     configMap:
       name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "test-ds") }}
       defaultMode: 0755
+  {{ include "ds.redis.ca.volume" . | nindent 2 }}
+  {{- with .Values.tests.extraVolumes }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
   restartPolicy: Never
 {{- end }}

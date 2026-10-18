@@ -154,6 +154,7 @@ spec:
         {{- with .Values.docservice.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{ include "ds.redis.ca.volume" . | nindent 8 }}
       terminationGracePeriodSeconds: {{ .Values.docservice.terminationGracePeriodSeconds }}
       {{- if .Values.docservice.hostAliases }}
       hostAliases: {{- toYaml .Values.docservice.hostAliases | nindent 8 }}
@@ -316,18 +317,8 @@ spec:
               secretKeyRef:
                 name: {{ template "ds.rabbitmq.secretName" . }}
                 key: {{ .Values.connections.amqpSecretKeyName }}
-          - name: REDIS_SERVER_PWD
-            valueFrom:
-              secretKeyRef:
-                name: {{ template "ds.redis.secretName" . }}
-                key: {{ .Values.connections.redisSecretKeyName }}
-          {{- if eq .Values.connections.redisConnectorName "ioredis" }}
-          - name: REDIS_SENTINEL_PWD
-            valueFrom:
-              secretKeyRef:
-                name: {{ template "ds.redis.sentinel.secretName" . }}
-                key: {{ .Values.connections.redisSentinelSecretKeyName }}
-          {{- end }}
+          {{ include "ds.redis.env" . | nindent 10 }}
+          {{ include "ds.redis.ca.env" (dict "context" . "extraEnvVars" .Values.docservice.extraEnvVars) | nindent 10 }}
           {{- with .Values.docservice.extraEnvVars }}
           {{- toYaml . | nindent 10 }}
           {{- end }}
@@ -394,3 +385,4 @@ spec:
           {{- with .Values.docservice.extraVolumeMounts }}
           {{- toYaml . | nindent 10 }}
           {{- end }}
+          {{ include "ds.redis.ca.mount" . | nindent 10 }}
