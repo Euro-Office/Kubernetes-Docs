@@ -263,16 +263,26 @@ Return true if a service object should be created for ds
 {{- end -}}
 
 {{/*
-Define a branch with sql scripts for ds
+Return the directory with the bundled sql scripts for the configured database type
 */}}
-{{- define "ds.sqlScripts.branchName" -}}
-{{- $appVersion := .Chart.AppVersion -}}
-{{- if semverCompare ">=7.2.0" $appVersion -}}
-    {{- printf "master" -}}
-{{- else if semverCompare ">=7.1.0 <7.2.0" $appVersion -}}
-    {{- printf "v7.1.1.23" -}}
+{{- define "ds.sql.dir" -}}
+{{- $dirs := dict "postgres" "postgresql" "mysql" "mysql" "mariadb" "mysql" "mssql" "mssql" "oracle" "oracle" "dameng" "dameng" -}}
+{{- required (printf "Unsupported connections.dbType: %s" .Values.connections.dbType) (get $dirs .Values.connections.dbType) -}}
+{{- end -}}
+
+{{/*
+Return the path of a sql script inside the job container
+Usage: include "ds.sql.path" (list . "createdb" .Values.install.existingConfigmap.tblCreate)
+Uses the file mounted from the existing ConfigMap if its name is set, otherwise the file bundled in the utils image
+*/}}
+{{- define "ds.sql.path" -}}
+{{- $ctx := index . 0 -}}
+{{- $file := index . 1 -}}
+{{- $override := index . 2 -}}
+{{- if $override.name -}}
+    {{- printf "/scripts/%s" $override.keyName -}}
 {{- else -}}
-    {{- printf "%s" .Values.sqlScripts.branchName -}}
+    {{- printf "/scripts/schema/%s/%s.sql" (include "ds.sql.dir" $ctx) $file -}}
 {{- end -}}
 {{- end -}}
 
@@ -302,8 +312,6 @@ Return the configmap name of removing tables for upgrade
 {{- define "ds.upgrade.configmap.tblRemove.name" -}}
 {{- if not (empty .Values.upgrade.existingConfigmap.tblRemove.name) }}
     {{- .Values.upgrade.existingConfigmap.tblRemove.name }}
-{{- else if and .Values.privateCluster (not .Values.upgrade.existingConfigmap.dsStop) (not .Values.upgrade.existingConfigmap.tblRemove.name) }}
-    {{- required "You set privateCluster=true and did not specify an existing secret containing the ds upgrade script. In this case, you must set upgrade.existingConfigmap.tblRemove.name!" .Values.upgrade.existingConfigmap.tblRemove.name }}
 {{- end }}
 {{- end -}}
 
@@ -313,8 +321,6 @@ Return the configmap name of creating tables for upgrade
 {{- define "ds.upgrade.configmap.tblCreate.name" -}}
 {{- if not (empty .Values.upgrade.existingConfigmap.tblCreate.name) }}
     {{- .Values.upgrade.existingConfigmap.tblCreate.name }}
-{{- else if and .Values.privateCluster (not .Values.upgrade.existingConfigmap.dsStop) (not .Values.upgrade.existingConfigmap.tblCreate.name) }}
-    {{- required "You set privateCluster=true and did not specify an existing secret containing the ds upgrade script. In this case, you must set upgrade.existingConfigmap.tblCreate.name!" .Values.upgrade.existingConfigmap.tblCreate.name }}
 {{- end }}
 {{- end -}}
 
@@ -344,8 +350,6 @@ Return the configmap name of removing tables for rollback
 {{- define "ds.rollback.configmap.tblRemove.name" -}}
 {{- if not (empty .Values.rollback.existingConfigmap.tblRemove.name) }}
     {{- .Values.rollback.existingConfigmap.tblRemove.name }}
-{{- else if and .Values.privateCluster (not .Values.rollback.existingConfigmap.dsStop) (not .Values.rollback.existingConfigmap.tblRemove.name) }}
-    {{- required "You set privateCluster=true and did not specify an existing secret containing the ds rollback script. In this case, you must set rollback.existingConfigmap.tblRemove.name!" .Values.rollback.existingConfigmap.tblRemove.name }}
 {{- end }}
 {{- end -}}
 
@@ -355,8 +359,6 @@ Return the configmap name of creating tables for rollback
 {{- define "ds.rollback.configmap.tblCreate.name" -}}
 {{- if not (empty .Values.rollback.existingConfigmap.tblCreate.name) }}
     {{- .Values.rollback.existingConfigmap.tblCreate.name }}
-{{- else if and .Values.privateCluster (not .Values.rollback.existingConfigmap.dsStop) (not .Values.rollback.existingConfigmap.tblCreate.name) }}
-    {{- required "You set privateCluster=true and did not specify an existing secret containing the ds rollback script. In this case, you must set rollback.existingConfigmap.tblCreate.name!" .Values.rollback.existingConfigmap.tblCreate.name }}
 {{- end }}
 {{- end -}}
 
@@ -386,8 +388,6 @@ Return the configmap name of deleting tables for rollback
 {{- define "ds.delete.configmap.tblRemove.name" -}}
 {{- if not (empty .Values.delete.existingConfigmap.tblRemove.name) }}
     {{- .Values.delete.existingConfigmap.tblRemove.name }}
-{{- else if and .Values.privateCluster (not .Values.delete.existingConfigmap.dsStop) (not .Values.delete.existingConfigmap.tblRemove.name) }}
-    {{- required "You set privateCluster=true and did not specify an existing secret containing the ds delete script. In this case, you must set delete.existingConfigmap.tblRemove.name!" .Values.delete.existingConfigmap.tblRemove.name }}
 {{- end }}
 {{- end -}}
 
@@ -417,8 +417,6 @@ Return the configmap name of creating tables for install ds
 {{- define "ds.install.configmap.tblCreate.name" -}}
 {{- if not (empty .Values.install.existingConfigmap.tblCreate.name) }}
     {{- .Values.install.existingConfigmap.tblCreate.name }}
-{{- else if and .Values.privateCluster (not .Values.install.existingConfigmap.initdb) (not .Values.install.existingConfigmap.tblCreate.name) }}
-    {{- required "You set privateCluster=true and did not specify an existing secret containing the initdb script. In this case, you must set install.existingConfigmap.tblCreate.name!" .Values.install.existingConfigmap.tblCreate.name }}
 {{- end }}
 {{- end -}}
 
