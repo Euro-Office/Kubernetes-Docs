@@ -123,7 +123,7 @@ connections:
   amqpPassword: ""
 ## Web Proxy parameters
 ## Used if your network has a web proxy
-## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs#11-run-jobs-in-a-private-k8s-cluster-optional
+## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs#11-database-schema-and-hook-jobs
 webProxy:
   ## webProxy.enabled Specify whether a Web proxy is used in your network to access the Pods of k8s cluster to the Internet
   enabled: false
@@ -133,9 +133,6 @@ webProxy:
   https: "https://proxy.example.com"
   ## webProxy.noProxy Patterns for IP addresses or k8s services name or domain names that shouldn’t use the Web Proxy
   noProxy: "localhost,127.0.0.1,docservice"
-## privateCluster Specify whether the k8s cluster is used in a private network without internet access
-## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs#11-run-jobs-in-a-private-k8s-cluster-optional
-privateCluster: false
 ## commonNameSuffix The name that will be added to the name of all created resources as a suffix
 ## Example:
 ## commonNameSuffix: "{{ .Chart.Name }}"
@@ -411,10 +408,6 @@ extraThemes:
   ## extraThemes.filename The name of the json file that contains custom interface themes
   ## Must be the same as the `key` name in `extraThemes.configMap`
   filename: custom-themes.json
-## sqlScripts.branchName The name of the repository branch from which sql scripts will be downloaded
-## ref: https://github.com/ONLYOFFICE/server/tree/master/schema
-sqlScripts:
-  branchName: master
 ## Onlyoffice Docs request-filtering-agent parameters
 ## These parameters are used if JWT is disabled: `jwt.enabled=false`
 requestFilteringAgent:
@@ -490,7 +483,8 @@ customPlugins:
 ## Global image parameters for all Onlyoffice Docs services and jobs
 images:
   ## images.tag Global image tag for all Onlyoffice Docs services and jobs
-  tag: 9.3.1-1
+  ## TODO: pin to the first release of cluster-docs, cluster-utils and cluster-example that ships `/scripts/schema` (DocumentServer#484)
+  tag: latest
 
 ## Onlyoffice Docs Docservice Deployment parameters
 ## This block defines the parameters common to all the Pods of this deployment
@@ -1694,9 +1688,8 @@ install:
   existingConfigmap:
     tblCreate:
       ## install.existingConfigmap.tblCreate.name The name of the existing ConfigMap that contains the sql file for craeting tables from the database
-      ## Used if `privateCluster` is set to `true`
-      ## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs#11-run-jobs-in-a-private-k8s-cluster-optional
-      name: init-db-scripts
+      ## If empty, the sql file bundled in the utils image under `/scripts/schema` is used
+      name: ""
       ## install.existingConfigmap.tblCreate.keyName The name of the sql file containing instructions for creating tables from the database
       ## Must be the same as the `key` name in `install.existingConfigmap.tblCreate.name`
       keyName: createdb.sql
@@ -1710,7 +1703,8 @@ install:
 upgrade:
   job:
     ## upgrade.job.enabled Enable the execution of job pre-upgrade before upgrading ONLYOFFICE Docs
-    enabled: true
+    ## Disabled by default: the job drops the tables `doc_changes`, `task_result` and `doc_callbacks`, see the README
+    enabled: false
     ## upgrade.job.annotations Defines annotations that will be additionally added to pre-upgrade Job
     ## If set to, it takes priority over the `commonAnnotations`
     ## You can also use `tpl` as the value for the key
@@ -1780,17 +1774,15 @@ upgrade:
   existingConfigmap:
     tblRemove:
       ## upgrade.existingConfigmap.tblRemove.name The name of the existing ConfigMap that contains the sql file for deleting tables from the database
-      ## Used if `privateCluster` is set to `true`
-      ## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs#11-run-jobs-in-a-private-k8s-cluster-optional
-      name: remove-db-scripts
+      ## If empty, the sql file bundled in the utils image under `/scripts/schema` is used
+      name: ""
       ## upgrade.existingConfigmap.tblRemove.keyName The name of the sql file containing instructions for deleting tables from the database
       ## Must be the same as the `key` name in `upgrade.existingConfigmap.tblRemove.name`
       keyName: removetbl.sql
     tblCreate:
       ## upgrade.existingConfigmap.tblCreate.name The name of the existing ConfigMap that contains the sql file for craeting tables from the database
-      ## Used if `privateCluster` is set to `true`
-      ## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs#11-run-jobs-in-a-private-k8s-cluster-optional
-      name: init-db-scripts
+      ## If empty, the sql file bundled in the utils image under `/scripts/schema` is used
+      name: ""
       ## upgrade.existingConfigmap.tblCreate.keyName The name of the sql file containing instructions for creating tables from the database
       ## Must be the same as the `key` name in `upgrade.existingConfigmap.tblCreate.name`
       keyName: createdb.sql
@@ -1804,7 +1796,8 @@ upgrade:
 rollback:
   job:
     ## rollback.job.enabled Enable the execution of job pre-rollback before rolling back ONLYOFFICE Docs
-    enabled: true
+    ## Disabled by default: the job drops the tables `doc_changes`, `task_result` and `doc_callbacks`, see the README
+    enabled: false
     ## rollback.job.annotations Defines annotations that will be additionally added to pre-rollback Job
     ## If set to, it takes priority over the `commonAnnotations`
     ## You can also use `tpl` as the value for the key
@@ -1874,17 +1867,15 @@ rollback:
   existingConfigmap:
     tblRemove:
       ## rollback.existingConfigmap.tblRemove.name The name of the existing ConfigMap that contains the sql file for deleting tables from the database
-      ## Used if `privateCluster` is set to `true`
-      ## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs#11-run-jobs-in-a-private-k8s-cluster-optional
-      name: remove-db-scripts
+      ## If empty, the sql file bundled in the utils image under `/scripts/schema` is used
+      name: ""
       ## rollback.existingConfigmap.tblRemove.keyName The name of the sql file containing instructions for deleting tables from the database
       ## Must be the same as the `key` name in `rollback.existingConfigmap.tblRemove.name`
       keyName: removetbl.sql
     tblCreate:
       ## rollback.existingConfigmap.tblCreate.name The name of the existing ConfigMap that contains the sql file for craeting tables from the database
-      ## Used if `privateCluster` is set to `true`
-      ## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs#11-run-jobs-in-a-private-k8s-cluster-optional
-      name: init-db-scripts
+      ## If empty, the sql file bundled in the utils image under `/scripts/schema` is used
+      name: ""
       ## rollback.existingConfigmap.tblCreate.keyName The name of the sql file containing instructions for creating tables from the database
       ## Must be the same as the `key` name in `rollback.existingConfigmap.tblCreate.name`
       keyName: createdb.sql
@@ -1898,7 +1889,8 @@ rollback:
 delete:
   job:
     ## delete.job.enabled Enable the execution of job pre-delete before deleting ONLYOFFICE Docs
-    enabled: true
+    ## Disabled by default: the job drops the tables `doc_changes`, `task_result` and `doc_callbacks`, see the README
+    enabled: false
     ## delete.job.annotations Defines annotations that will be additionally added to pre-delete Job
     ## If set to, it takes priority over the `commonAnnotations`
     ## You can also use `tpl` as the value for the key
@@ -1968,9 +1960,8 @@ delete:
   existingConfigmap:
     tblRemove:
       ## delete.existingConfigmap.tblRemove.name The name of the existing ConfigMap that contains the sql file for deleting tables from the database
-      ## Used if `privateCluster` is set to `true`
-      ## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs#11-run-jobs-in-a-private-k8s-cluster-optional
-      name: remove-db-scripts
+      ## If empty, the sql file bundled in the utils image under `/scripts/schema` is used
+      name: ""
       ## delete.existingConfigmap.tblRemove.keyName The name of the sql file containing instructions for deleting tables from the database
       ## Must be the same as the `key` name in `delete.existingConfigmap.tblRemove.name`
       keyName: removetbl.sql

@@ -52,7 +52,7 @@ This repository contains a set of files to deploy Euro-Office Docs into a Kubern
   * [8. Shutdown Euro-Office Docs (optional)](#8-shutdown-euro-office-docs-optional)
   * [9. Update Euro-Office Docs license (optional)](#9-update-euro-office-docs-license-optional)
   * [10. Euro-Office Docs installation test (optional)](#10-euro-office-docs-installation-test-optional)
-  * [11. Run Jobs in a private k8s cluster (optional)](#11-run-jobs-in-a-private-k8s-cluster-optional)
+  * [11. Database schema and hook Jobs](#11-database-schema-and-hook-jobs)
   * [12. Access to the info page (optional)](#12-access-to-the-info-page-optional)
 - [Using Grafana to visualize metrics (optional)](#using-grafana-to-visualize-metrics-optional)
   * [1. Deploy Grafana](#1-deploy-grafana)
@@ -360,7 +360,7 @@ $ helm install documentserver euro-office/docs
 
 The command deploys Euro-Office Docs on the Kubernetes cluster in the default configuration. The [Parameters](#4-parameters) section lists the parameters that can be configured during installation.
 
-Note: When installing Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
+Note: The database tables are created by the `pre-install` Job from the SQL schema bundled in the utils image, see the [notes](#11-database-schema-and-hook-jobs) below.
 
 ### 3. Uninstall Euro-Office Docs
 
@@ -370,14 +370,14 @@ To uninstall/delete the `documentserver` deployment:
 $ helm delete documentserver
 ```
 
-Executing the `helm delete` command launches hooks, which perform some preparatory actions before completely deleting the Euro-Office Docs, which include stopping the server, cleaning up the used PVC and database tables.
+Executing the `helm delete` command launches hooks, which perform some preparatory actions before completely deleting the Euro-Office Docs, which include stopping the server and cleaning up the used PVC. Dropping the database tables is performed only if `delete.job.enabled=true`.
 The default hook execution time is 300s. The execution time can be changed using `--timeout [time]`, for example:
 
 ```bash
 $ helm delete documentserver --timeout 25m
 ```
 
-Note: When deleting Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
+Note: The `pre-delete` Job is disabled by default. See the [notes](#11-database-schema-and-hook-jobs) below.
 
 If you want to delete the Euro-Office Docs without any preparatory actions, run the following command:
 
@@ -483,7 +483,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `customPlugins.defaultPlugins.enabled`                      | Defines whether [plugins](./CUSTOM_RESOURCES.md#disable-all-default-plugins) will be installed on the server and in the `Plugins` menu. It is executed if the `customPlugins.build` is set to `true`                              | `true`                                 |
 | `customPlugins.defaultPlugins.list`                         | Defines [which plugins](./CUSTOM_RESOURCES.md#install-selected-default-plugins-only) from the default list will be installed on the server and in the `Plugins` menu. It is executed if the `customPlugins.build` is set to `true`          | `[]`                         |
 | `customPlugins.emptyPluginsDir`                             | Defines whether a directory with plugins in containers will [contain files](./CUSTOM_RESOURCES.md#completely-disable-plugins-directory), including service files. If set to `true`, an empty volume with the `emptyDir` type will be mapped  | `false`                     |
-| `images.tag`                                                | Global image tag for all Euro-Office Docs services and jobs                                                                                                                     | `9.3.1-1`                                                                                 |
+| `images.tag`                                                | Global image tag for all Euro-Office Docs services and jobs                                                                                                                     | `latest`                                                                                  |
 | `docservice.annotations`                                    | Defines annotations that will be additionally added to Docservice Deployment. If set to, it takes priority over the `commonAnnotations`                                        | `{}`                                                                                      |
 | `docservice.podAnnotations`                                 | Map of annotations to add to the Docservice deployment pods                                                                                                                    | `rollme: "{{ randAlphaNum 5 \| quote }}"`                                                 |
 | `docservice.replicas`                                       | Docservice replicas quantity. If the `docservice.autoscaling.enabled` parameter is enabled, it is ignored                                                                      | `2`                                                                                       |
@@ -670,8 +670,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `webProxy.http`                                             | Web Proxy address for `HTTP` traffic                                                                                                                                           | `http://proxy.example.com`                                                                |
 | `webProxy.https`                                            | Web Proxy address for `HTTPS` traffic                                                                                                                                          | `https://proxy.example.com`                                                               |
 | `webProxy.noProxy`                                          | Patterns for IP addresses or k8s services name or domain names that shouldn’t use the Web Proxy                                                                                | `localhost,127.0.0.1,docservice`                                                          |
-| `privateCluster`                                            | Specify whether the k8s cluster is used in a private network without internet access                                                                                           | `false`                                                                                   |
-| `upgrade.job.enabled`                                       | Enable the execution of job pre-upgrade before upgrading Euro-Office Docs                                                                                                       | `true`                                                                                    |
+| `upgrade.job.enabled`                                       | Enable the execution of job pre-upgrade before upgrading Euro-Office Docs. Drops the tables `doc_changes`, `task_result` and `doc_callbacks`, see [notes](#11-database-schema-and-hook-jobs) | `false`                                                                                   |
 | `upgrade.job.annotations`                                   | Defines annotations that will be additionally added to pre-upgrade Job. If set to, it takes priority over the `commonAnnotations`                                              | `{}`                                                                                      |
 | `upgrade.job.podAnnotations`                                | Map of annotations to add to the pre-upgrade Pod                                                                                                                               | `{}`                                                                                      |
 | `upgrade.job.customPodAntiAffinity`                         | Prohibiting the scheduling of pre-upgrade Job Pod relative to other Pods containing the specified labels on the same node                                                      | `{}`                                                                                      |
@@ -686,12 +685,12 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `upgrade.job.containerSecurityContext.enabled`              | Enable security context for the pre-upgrade container                                                                                                                          | `false`                                                                                   |
 | `upgrade.job.resources.requests`                            | The requested resources for the job pre-upgrade container                                                                                                                      | `{}`                                                                                      |
 | `upgrade.job.resources.limits`                              | The resources limits for the job pre-upgrade container                                                                                                                         | `{}`                                                                                      |
-| `upgrade.existingConfigmap.tblRemove.name`                  | The name of the existing ConfigMap that contains the sql file for deleting tables from the database                                                                            | `remove-db-scripts`                                                                       |
+| `upgrade.existingConfigmap.tblRemove.name`                  | The name of the existing ConfigMap that contains the sql file for deleting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `upgrade.existingConfigmap.tblRemove.keyName`               | The name of the sql file containing instructions for deleting tables from the database. Must be the same as the `key` name in `upgrade.existingConfigmap.tblRemove.name`       | `removetbl.sql`                                                                           |
-| `upgrade.existingConfigmap.tblCreate.name`                  | The name of the existing ConfigMap that contains the sql file for craeting tables from the database                                                                            | `init-db-scripts`                                                                         |
+| `upgrade.existingConfigmap.tblCreate.name`                  | The name of the existing ConfigMap that contains the sql file for craeting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `upgrade.existingConfigmap.tblCreate.keyName`               | The name of the sql file containing instructions for creating tables from the database. Must be the same as the `key` name in `upgrade.existingConfigmap.tblCreate.name`       | `createdb.sql`                                                                            |
 | `upgrade.existingConfigmap.dsStop`                          | The name of the existing ConfigMap that contains the Euro-Office Docs upgrade script. If set, the four previous parameters are ignored. Must contain a key `stop.sh`            | `""`                                                                                      |
-| `rollback.job.enabled`                                      | Enable the execution of job pre-rollback before rolling back Euro-Office Docs                                                                                                   | `true`                                                                                    |
+| `rollback.job.enabled`                                      | Enable the execution of job pre-rollback before rolling back Euro-Office Docs. Drops the tables `doc_changes`, `task_result` and `doc_callbacks`, see [notes](#11-database-schema-and-hook-jobs) | `false`                                                                                   |
 | `rollback.job.annotations`                                  | Defines annotations that will be additionally added to pre-rollback Job. If set to, it takes priority over the `commonAnnotations`                                             | `{}`                                                                                      |
 | `rollback.job.podAnnotations`                               | Map of annotations to add to the pre-rollback Pod                                                                                                                              | `{}`                                                                                      |
 | `rollback.job.customPodAntiAffinity`                        | Prohibiting the scheduling of pre-rollback Job Pod relative to other Pods containing the specified labels on the same node                                                     | `{}`                                                                                      |
@@ -706,12 +705,12 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `rollback.job.containerSecurityContext.enabled`             | Enable security context for the pre-rollback container                                                                                                                         | `false`                                                                                   |
 | `rollback.job.resources.requests`                           | The requested resources for the job rollback container                                                                                                                         | `{}`                                                                                      |
 | `rollback.job.resources.limits`                             | The resources limits for the job rollback container                                                                                                                            | `{}`                                                                                      |
-| `rollback.existingConfigmap.tblRemove.name`                 | The name of the existing ConfigMap that contains the sql file for deleting tables from the database                                                                            | `remove-db-scripts`                                                                       |
+| `rollback.existingConfigmap.tblRemove.name`                 | The name of the existing ConfigMap that contains the sql file for deleting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `rollback.existingConfigmap.tblRemove.keyName`              | The name of the sql file containing instructions for deleting tables from the database. Must be the same as the `key` name in `rollback.existingConfigmap.tblRemove.name`      | `removetbl.sql`                                                                           |
-| `rollback.existingConfigmap.tblCreate.name`                 | The name of the existing ConfigMap that contains the sql file for craeting tables from the database                                                                            | `init-db-scripts`                                                                         |
+| `rollback.existingConfigmap.tblCreate.name`                 | The name of the existing ConfigMap that contains the sql file for craeting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `rollback.existingConfigmap.tblCreate.keyName`              | The name of the sql file containing instructions for creating tables from the database. Must be the same as the `key` name in `rollback.existingConfigmap.tblCreate.name`      | `createdb.sql`                                                                            |
 | `rollback.existingConfigmap.dsStop`                         | The name of the existing ConfigMap that contains the Euro-Office Docs rollback script. If set, the four previous parameters are ignored. Must contain a key `stop.sh`           | `""`                                                                                      |
-| `delete.job.enabled`                                        | Enable the execution of job pre-delete before deleting Euro-Office Docs                                                                                                         | `true`                                                                                    |
+| `delete.job.enabled`                                        | Enable the execution of job pre-delete before deleting Euro-Office Docs. Drops the tables `doc_changes`, `task_result` and `doc_callbacks`, see [notes](#11-database-schema-and-hook-jobs) | `false`                                                                                   |
 | `delete.job.annotations`                                    | Defines annotations that will be additionally added to pre-delete Job. If set to, it takes priority over the `commonAnnotations`                                               | `{}`                                                                                      |
 | `delete.job.podAnnotations`                                 | Map of annotations to add to the pre-delete Pod                                                                                                                                | `{}`                                                                                      |
 | `delete.job.customPodAntiAffinity`                          | Prohibiting the scheduling of pre-delete Job Pod relative to other Pods containing the specified labels on the same node                                                       | `{}`                                                                                      |
@@ -726,7 +725,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `delete.job.containerSecurityContext.enabled`               | Enable security context for the pre-delete container                                                                                                                           | `false`                                                                                   |
 | `delete.job.resources.requests`                             | The requested resources for the job delete container                                                                                                                           | `{}`                                                                                      |
 | `delete.job.resources.limits`                               | The resources limits for the job delete container                                                                                                                              | `{}`                                                                                      |
-| `delete.existingConfigmap.tblRemove.name`                   | The name of the existing ConfigMap that contains the sql file for deleting tables from the database                                                                            | `remove-db-scripts`                                                                       |
+| `delete.existingConfigmap.tblRemove.name`                   | The name of the existing ConfigMap that contains the sql file for deleting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `delete.existingConfigmap.tblRemove.keyName`                | The name of the sql file containing instructions for deleting tables from the database. Must be the same as the `key` name in `delete.existingConfigmap.tblRemove.name`        | `removetbl.sql`                                                                           |
 | `delete.existingConfigmap.dsStop`                           | The name of the existing ConfigMap that contains the Euro-Office Docs delete script. If set, the two previous parameters are ignored. Must contain a key `stop.sh`              | `""`                                                                                      |
 | `install.job.enabled`                                       | Enable the execution of job pre-install before installing Euro-Office Docs                                                                                                      | `true`                                                                                    |
@@ -744,7 +743,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `install.job.containerSecurityContext.enabled`              | Enable security context for the pre-install container                                                                                                                          | `false`                                                                                   |
 | `install.job.resources.requests`                            | The requested resources for the job pre-install container                                                                                                                      | `{}`                                                                                      |
 | `install.job.resources.limits`                              | The resources limits for the job pre-install container                                                                                                                         | `{}`                                                                                      |
-| `install.existingConfigmap.tblCreate.name`                  | The name of the existing ConfigMap that contains the sql file for craeting tables from the database                                                                            | `init-db-scripts`                                                                         |
+| `install.existingConfigmap.tblCreate.name`                  | The name of the existing ConfigMap that contains the sql file for craeting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `install.existingConfigmap.tblCreate.keyName`               | The name of the sql file containing instructions for creating tables from the database. Must be the same as the `key` name in `install.existingConfigmap.tblCreate.name`       | `createdb.sql`                                                                            |
 | `install.existingConfigmap.initdb`                          | The name of the existing ConfigMap that contains the initdb script. If set, the two previous parameters are ignored. Must contain a key `initdb.sh`                            | `""`                                                                                      |
 | `clearCache.job.enabled`                                    | Enable the execution of job Clear Cache after upgrading Euro-Office Docs. Job by Clear Cache has a `post-upgrade` hook executes after any resources have been upgraded in Kubernetes. He clears the Cache directory | `true`                                                |
@@ -1098,14 +1097,14 @@ Or modify the values.yaml file and run the command:
 $ helm upgrade documentserver -f values.yaml euro-office/docs
 ```
 
-Running the helm upgrade command runs a hook that shuts down the Euro-Office Docs and cleans up the database. This is needed when updating the version of Euro-Office Docs. The default hook execution time is 300s.
+The hook that shuts down the Euro-Office Docs and recreates the database tables is disabled by default (`upgrade.job.enabled=false`), see the [notes](#11-database-schema-and-hook-jobs) below. The default hook execution time is 300s.
 The execution time can be changed using --timeout [time], for example
 
 ```bash
 $ helm upgrade documentserver -f values.yaml euro-office/docs --timeout 15m
 ```
 
-Note: When upgrading Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
+Note: The `pre-upgrade` Job is disabled by default and drops database tables when enabled. See the [notes](#11-database-schema-and-hook-jobs) below.
 
 If you want to update any parameter other than the version of the Euro-Office Docs, then run the `helm upgrade` command without `hooks`, for example:
 
@@ -1119,7 +1118,7 @@ To rollback updates, run the following command:
 $ helm rollback documentserver
 ```
 
-Note: When rolling back Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
+Note: The `pre-rollback` Job is disabled by default and drops database tables when enabled. See the [notes](#11-database-schema-and-hook-jobs) below.
 
 ### 8. Shutdown Euro-Office Docs (optional)
 
@@ -1205,49 +1204,54 @@ Note: This testing is for informational purposes only and cannot guarantee 100% 
 It may be that even though all checks are completed successfully, an error occurs in the application.
 In this case, more detailed information can be found in the application logs.
 
-### 11. Run Jobs in a private k8s cluster (optional)
+### 11. Database schema and hook Jobs
 
-When running `Job` for installation, update, rollback and deletion, the container being launched needs Internet access to download the latest sql scripts.
-If the access of containers to the external network is prohibited in your k8s cluster, then you can perform these Jobs by setting the `privateCluster=true` parameter and manually create a `ConfigMap` with the necessary sql scripts.
+The SQL scripts used by the `pre-install` Job (`createdb.sql`) and by the optional `pre-upgrade`, `pre-rollback` and `pre-delete` Jobs (`removetbl.sql`, `createdb.sql`) are bundled in the `cluster-utils` image under `/scripts/schema/<dbType>/`. Nothing is downloaded at runtime, so the Jobs work in clusters without Internet access and the schema always matches the image version.
 
-To do this, run the following commands:
+| `connections.dbType`  | Directory in the image        |
+|-----------------------|-------------------------------|
+| `postgres`            | `/scripts/schema/postgresql/` |
+| `mysql`, `mariadb`    | `/scripts/schema/mysql/`      |
+| `mssql`               | `/scripts/schema/mssql/`      |
+| `oracle`              | `/scripts/schema/oracle/`     |
+| `dameng`              | `/scripts/schema/dameng/`     |
 
-If your cluster already has `remove-db-scripts` and `init-db-scripts` configmaps, then delete them:
+If the script is not found, the Job fails.
 
-```bash
-$ kubectl delete cm remove-db-scripts init-db-scripts
-```
+> **Note**: The `cluster-utils` image contains the clients for PostgreSQL, MySQL/MariaDB, MSSQL and Oracle. It does not contain the Dameng client (`disql`), so the Jobs cannot work with `connections.dbType=dameng` unless you provide a custom image that includes it.
 
-Download the Euro-Office Docs database scripts for database cleaning and database tables creating:
+#### Using your own SQL scripts
 
-If PostgreSQL is selected as the database server:
-
-```bash
-$ wget -O removetbl.sql https://raw.githubusercontent.com/Euro-Office/server/master/schema/postgresql/removetbl.sql
-$ wget -O createdb.sql https://raw.githubusercontent.com/Euro-Office/server/master/schema/postgresql/createdb.sql
-```
-
-If MySQL is selected as the database server:
+To use your own scripts instead of the bundled ones, create a `ConfigMap` and set its name and the key name for the corresponding Job:
 
 ```bash
-$ wget -O removetbl.sql https://raw.githubusercontent.com/Euro-Office/server/master/schema/mysql/removetbl.sql
-$ wget -O createdb.sql https://raw.githubusercontent.com/Euro-Office/server/master/schema/mysql/createdb.sql
-```
-
-Create a configmap from them:
-
-```bash
-$ kubectl create configmap remove-db-scripts --from-file=./removetbl.sql
 $ kubectl create configmap init-db-scripts --from-file=./createdb.sql
+$ helm install documentserver euro-office/docs \
+  --set install.existingConfigmap.tblCreate.name=init-db-scripts \
+  --set install.existingConfigmap.tblCreate.keyName=createdb.sql
 ```
 
-Note: If you specified a different name for `ConfigMap` and for the file from which it is created, set the appropriate parameters for the corresponding Jobs:
- - `existingConfigmap.tblRemove.name` and `existingConfigmap.tblRemove.keyName` for scripts for database cleaning
- - `existingConfigmap.tblCreate.name` and `existingConfigmap.tblCreate.keyName` for scripts for database tables creating
+The same applies to `upgrade.existingConfigmap.*`, `rollback.existingConfigmap.*` (`tblRemove` and `tblCreate`) and `delete.existingConfigmap.tblRemove`. The file is mounted at `/scripts/<keyName>`.
 
-Next, when executing the commands `helm install|upgrade|rollback|delete`, set the parameter `privateCluster=true`
+#### Jobs that drop tables (disabled by default)
 
-  > **Note**: If it is possible to use a Web Proxy in your network to ensure the Pods containers have access to the Internet, then you can leave the parameter `privateCluster=false`, not manually create a configmaps with sql scripts and set the parameter `webProxy.enabled=true`, also setting the appropriate parameters for the Web Proxy.
+`upgrade.job.enabled`, `rollback.job.enabled` and `delete.job.enabled` are `false` by default. When enabled, the corresponding hook asks the Docservice to stop accepting new connections (`/internal/cluster/inactive`), waits for open documents to be saved and then runs `removetbl.sql`, which **drops the tables `doc_changes`, `task_result` and `doc_callbacks`** (the `upgrade` and `rollback` Jobs then recreate them with `createdb.sql`).
+
+They are off by default because the editor state is kept in the memory of each Docservice Pod. The `inactive` request is sent to all Docservice Pods, but the wait only counts the open documents on the Pod that received it. With more than one Docservice replica, the tables may therefore be dropped while other Pods are still saving.
+
+Enable these Jobs only if you understand and accept this, for example with a single Docservice replica and no active editing sessions:
+
+```bash
+$ helm upgrade documentserver euro-office/docs --set upgrade.job.enabled=true
+```
+
+#### Migration notes
+
+* `privateCluster` and `sqlScripts.branchName` are removed. Remove them from your values files. The Jobs no longer download anything, and the `ConfigMap`s with SQL scripts created for `privateCluster=true` are no longer required. If you still want to use them, set the `existingConfigmap.*.name` parameters explicitly.
+* The defaults of `*.existingConfigmap.tblCreate.name` and `*.existingConfigmap.tblRemove.name` changed from `init-db-scripts`/`remove-db-scripts` to `""`. Set the name explicitly if you rely on those ConfigMaps.
+* `upgrade.job.enabled`, `rollback.job.enabled` and `delete.job.enabled` now default to `false`. If you relied on the tables being recreated on `helm upgrade`, set them to `true` explicitly. Note that `helm delete` no longer drops the database tables by default.
+* `webProxy` is still available for the Jobs that need Internet access to other resources.
+* The `cluster-utils` image tag must be a release that contains `/scripts/schema`. Older images do not, and the Jobs fail.
 
 ### 12. Access to the info page (optional)
 

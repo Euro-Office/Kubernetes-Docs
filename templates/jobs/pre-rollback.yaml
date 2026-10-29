@@ -69,10 +69,12 @@ spec:
           configMap:
             name: {{ template "ds.rollback.configMapName" . }}
             defaultMode: 0755
-        {{- if and .Values.privateCluster (not .Values.rollback.existingConfigmap.dsStop) }}
+        {{- if and .Values.rollback.existingConfigmap.tblRemove.name (not .Values.rollback.existingConfigmap.dsStop) }}
         - name: remove-dt-scripts
           configMap:
             name: {{ template "ds.rollback.configmap.tblRemove.name" . }}
+        {{- end }}
+        {{- if and .Values.rollback.existingConfigmap.tblCreate.name (not .Values.rollback.existingConfigmap.dsStop) }}
         - name: create-dt-scripts
           configMap:
             name: {{ template "ds.rollback.configmap.tblCreate.name" . }}
@@ -95,8 +97,6 @@ spec:
               secretKeyRef:
                 name: {{ template "ds.db.secretName" . }}
                 key: {{ .Values.connections.dbSecretKeyName }}
-          - name: PRIVATE_CLUSTER
-            value: {{ .Values.privateCluster | quote }}
           volumeMounts:
           {{- if not .Values.persistence.storageS3 }}
           - name: ds-files
@@ -105,10 +105,12 @@ spec:
           - name: stop-scripts
             mountPath: /scripts/stop.sh
             subPath: stop.sh
-          {{- if and .Values.privateCluster (not .Values.rollback.existingConfigmap.dsStop) }}
+          {{- if and .Values.rollback.existingConfigmap.tblRemove.name (not .Values.rollback.existingConfigmap.dsStop) }}
           - name: remove-dt-scripts
             mountPath: /scripts/{{ .Values.rollback.existingConfigmap.tblRemove.keyName }}
             subPath: {{ .Values.rollback.existingConfigmap.tblRemove.keyName }}
+          {{- end }}
+          {{- if and .Values.rollback.existingConfigmap.tblCreate.name (not .Values.rollback.existingConfigmap.dsStop) }}
           - name: create-dt-scripts
             mountPath: /scripts/{{ .Values.rollback.existingConfigmap.tblCreate.keyName }}
             subPath: {{ .Values.rollback.existingConfigmap.tblCreate.keyName }}
