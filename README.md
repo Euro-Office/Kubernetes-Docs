@@ -1216,9 +1216,7 @@ The SQL scripts used by the `pre-install` Job (`createdb.sql`) and by the option
 | `oracle`              | `/scripts/schema/oracle/`     |
 | `dameng`              | `/scripts/schema/dameng/`     |
 
-> **Requirement: utils image**: the `cluster-utils` image used by the Jobs must contain `/scripts/schema/<dbType>/createdb.sql` (and `removetbl.sql` for the `upgrade`, `rollback` and `delete` Jobs). There is no released image with these files yet. At the time of writing only the `nightly` tag is known to contain them, and the `cluster-utils` image of Docs 9.3.7 does not. The `images.tag` default (`latest`) was not verified to contain them either.
->
-> **TODO**: pin `images.tag` to the first release of `cluster-docs`, `cluster-utils` and `cluster-example` that ships `/scripts/schema` (see the TODO at `images.tag` in `values.yaml`). Until then set `images.tag` or `<job>.job.image.tag` to a tag that has the files.
+> **Requirement: utils image**: the `cluster-utils` image used by the Jobs must contain `/scripts/schema/<dbType>/createdb.sql` (and `removetbl.sql` for the `upgrade`, `rollback` and `delete` Jobs).
 
 If the script is not found, the Job fails with a message like the following and nothing is changed in the database:
 
