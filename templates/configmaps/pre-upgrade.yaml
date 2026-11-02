@@ -77,6 +77,10 @@ data:
         --dbname={{ .Values.connections.dbName }} \
         --variable=ON_ERROR_STOP=ON \
         --file="$REMOVE_SQL"
+      if [ $? -ne 0 ]; then
+        echo -e "\e[0;31m The DATABASE cleanup script could not be executed \e[0m"
+        exit 1
+      fi
       PGPASSWORD=$DB_PWD psql --host={{ .Values.connections.dbHost }} \
         --port={{ .Values.connections.dbPort }} \
         --user={{ .Values.connections.dbUser }} \
@@ -89,6 +93,10 @@ data:
         -u {{ .Values.connections.dbUser }} \
         -p$DB_PWD \
         {{ .Values.connections.dbName }} < "$REMOVE_SQL"
+      if [ $? -ne 0 ]; then
+        echo -e "\e[0;31m The DATABASE cleanup script could not be executed \e[0m"
+        exit 1
+      fi
       mysql -h {{ .Values.connections.dbHost }} \
         -P {{ .Values.connections.dbPort }} \
         -u {{ .Values.connections.dbUser }} \
@@ -99,15 +107,27 @@ data:
         -U {{ .Values.connections.dbUser }} \
         -P $DB_PWD \
         -d {{ .Values.connections.dbName }} -C < "$REMOVE_SQL"
+      if [ $? -ne 0 ]; then
+        echo -e "\e[0;31m The DATABASE cleanup script could not be executed \e[0m"
+        exit 1
+      fi
       /opt/mssql-tools18/bin/sqlcmd -S {{ .Values.connections.dbHost }},{{ .Values.connections.dbPort }} \
         -U {{ .Values.connections.dbUser }} \
         -P $DB_PWD \
         -d {{ .Values.connections.dbName }} -C < "$CREATE_SQL"
       {{- else if (eq .Values.connections.dbType "oracle") }}
       sqlplus {{ .Values.connections.dbUser }}/$DB_PWD@//{{ .Values.connections.dbHost }}:{{ .Values.connections.dbPort }}/{{ .Values.connections.dbName }} @"$REMOVE_SQL"
+      if [ $? -ne 0 ]; then
+        echo -e "\e[0;31m The DATABASE cleanup script could not be executed \e[0m"
+        exit 1
+      fi
       sqlplus {{ .Values.connections.dbUser }}/$DB_PWD@//{{ .Values.connections.dbHost }}:{{ .Values.connections.dbPort }}/{{ .Values.connections.dbName }} @"$CREATE_SQL"
       {{- else if (eq .Values.connections.dbType "dameng") }}
       disql {{ .Values.connections.dbUser }}/$DB_PWD@{{ .Values.connections.dbHost }}:{{ .Values.connections.dbPort }} \`"$REMOVE_SQL"
+      if [ $? -ne 0 ]; then
+        echo -e "\e[0;31m The DATABASE cleanup script could not be executed \e[0m"
+        exit 1
+      fi
       disql {{ .Values.connections.dbUser }}/$DB_PWD@{{ .Values.connections.dbHost }}:{{ .Values.connections.dbPort }} \`"$CREATE_SQL"
       {{- end }}
       if [ $? -ne 0 ]; then
