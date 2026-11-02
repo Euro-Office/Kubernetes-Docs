@@ -11,6 +11,7 @@ metadata:
   annotations:
     "helm.sh/hook": pre-rollback
     "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
     {{- if .Values.commonAnnotations }}
     {{- include "ds.annotations.commonAnnotations" ( dict "keyName" .Values.commonAnnotations "context" $ ) | nindent 4 }}
     {{- end }}
