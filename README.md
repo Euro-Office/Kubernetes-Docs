@@ -1249,7 +1249,7 @@ The same applies to `upgrade.existingConfigmap.*`, `rollback.existingConfigmap.*
 
 They are off by default because the editor state is kept in the memory of each Docservice Pod. The `inactive` request is sent to all Docservice Pods, but the wait only counts the open documents on the Pod that received it. With more than one Docservice replica, the tables may therefore be dropped while other Pods are still saving.
 
-During testing (Docs 9.3.7, no open editors) the `PUT /internal/cluster/inactive` call blocked for about 30 seconds in each of the `pre-upgrade`, `pre-rollback` and `pre-delete` Jobs, and the request reached only one Docservice Pod (this differs from the description above). The cause is not known. Allow for this delay when you choose the `--timeout` of `helm upgrade`, `helm rollback` and `helm delete` (the default is 300s). The Jobs use `backoffLimit: 2`; a failed attempt is retried and repeats the call.
+The `PUT /internal/cluster/inactive` call takes at least 30 seconds, even with no open editors: after sending the shutdown to all Docservice Pods, the server waits a fixed 30 seconds for delivery before it checks for open documents. It returns `false` if documents are still being saved after 30 seconds plus the conversion timeout; the `pre-upgrade` Job then stops, while `pre-rollback` and `pre-delete` continue. Allow for this delay in the `--timeout` of `helm upgrade`, `helm rollback` and `helm uninstall` (default 300s). The Jobs use `backoffLimit: 2`, so a failed attempt is retried and repeats the call.
 
 Enable these Jobs only if you understand and accept this, for example with a single Docservice replica and no active editing sessions:
 
