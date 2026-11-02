@@ -1216,7 +1216,17 @@ The SQL scripts used by the `pre-install` Job (`createdb.sql`) and by the option
 | `oracle`              | `/scripts/schema/oracle/`     |
 | `dameng`              | `/scripts/schema/dameng/`     |
 
-If the script is not found, the Job fails.
+> **Requirement: utils image**: the `cluster-utils` image used by the Jobs must contain `/scripts/schema/<dbType>/createdb.sql` (and `removetbl.sql` for the `upgrade`, `rollback` and `delete` Jobs). There is no released image with these files yet. At the time of writing only the `nightly` tag is known to contain them, and the `cluster-utils` image of Docs 9.3.7 does not. The `images.tag` default (`latest`) was not verified to contain them either.
+>
+> **TODO**: pin `images.tag` to the first release of `cluster-docs`, `cluster-utils` and `cluster-example` that ships `/scripts/schema` (see the TODO at `images.tag` in `values.yaml`). Until then set `images.tag` or `<job>.job.image.tag` to a tag that has the files.
+
+If the script is not found, the Job fails with a message like the following and nothing is changed in the database:
+
+```
+SQL script /scripts/schema/postgresql/createdb.sql not found
+```
+
+Workaround for an image without the schema: provide the scripts yourself with `existingConfigmap.tblCreate` / `existingConfigmap.tblRemove`, see [Using your own SQL scripts](#using-your-own-sql-scripts). The file is mounted as a single file (`subPath`) at `/scripts/<keyName>`, and the Job then uses that path instead of the bundled one.
 
 > **Note**: The `cluster-utils` image contains the clients for PostgreSQL, MySQL/MariaDB, MSSQL and Oracle. It does not contain the Dameng client (`disql`), so the Jobs cannot work with `connections.dbType=dameng` unless you provide a custom image that includes it.
 
@@ -1239,11 +1249,17 @@ The same applies to `upgrade.existingConfigmap.*`, `rollback.existingConfigmap.*
 
 They are off by default because the editor state is kept in the memory of each Docservice Pod. The `inactive` request is sent to all Docservice Pods, but the wait only counts the open documents on the Pod that received it. With more than one Docservice replica, the tables may therefore be dropped while other Pods are still saving.
 
+During testing (Docs 9.3.7, no open editors) the `PUT /internal/cluster/inactive` call blocked for about 30 seconds in each of the `pre-upgrade`, `pre-rollback` and `pre-delete` Jobs, and the request reached only one Docservice Pod (this differs from the description above). The cause is not known. Allow for this delay when you choose the `--timeout` of `helm upgrade`, `helm rollback` and `helm delete` (the default is 300s). The Jobs use `backoffLimit: 2`; a failed attempt is retried and repeats the call.
+
 Enable these Jobs only if you understand and accept this, for example with a single Docservice replica and no active editing sessions:
 
 ```bash
 $ helm upgrade documentserver euro-office/docs --set upgrade.job.enabled=true
 ```
+
+#### WOPI keys are deleted on `helm uninstall`
+
+`helm uninstall` (and a replace of the release, which uninstalls and installs again) runs the `wopi-keys-del` hook, which deletes the Secrets `docs-wopi-keys` and `docs-wopi-keys-old` (the names get the `commonNameSuffix`, if set). The next install generates them again, so the automatically generated WOPI keys change. The hook runs only if `wopi.keys.generation` and `wopiKeysDeletion.job.enabled` are `true`; set `wopiKeysDeletion.job.enabled=false` if the Secrets must survive an uninstall.
 
 #### Migration notes
 
