@@ -159,26 +159,6 @@ helm install|upgrade documentserver onlyoffice/docs \
 
 ## Disabling Default Plugins
 
-### Disable Plugin Manager
-
-Apply the `docs-custom-resources-pvc.yaml` manifest if you [haven't already done so](#1-create-pvc-and-helper-pod-1).
-
-``` bash
-helm install|upgrade documentserver onlyoffice/docs \
-  --set persistence.buffer.existingClaim=docs-buffer \
-  --set customPlugins.build=true \
-  --set customPlugins.marketplace.enabled=false \
-  --timeout 25m \
-  -n <NAMESPACE>
-```
-
-> **Note:**\
-> If you want to disable only the Plugin Manager and PVC `docs-custom-resources` is not applied (or your own for `persistence.customResources.existingClaim`),\
-> then add the `persistence.customResources.enabled=false` parameter\
-> so that the Job `custom-resources` did not use PVC `persistence.customResources`
-
-This removes the `marketplace` directory and hides the "Plugin Manager" from the Plugins menu.
-
 ### Install Selected Default Plugins Only
 
 Apply the `docs-custom-resources-pvc.yaml` manifest if you [haven't already done so](#1-create-pvc-and-helper-pod-1).
@@ -191,7 +171,7 @@ To do this, specify them in the `customPlugins.defaultPlugins.list` parameter an
 helm install|upgrade documentserver onlyoffice/docs \
   --set persistence.buffer.existingClaim=docs-buffer \
   --set customPlugins.build=true \
-  --set "customPlugins.defaultPlugins.list={ai,photoeditor}" \
+  --set "customPlugins.defaultPlugins.list={highlightcode,photoeditor}" \
   --timeout 25m \
   -n <NAMESPACE>
 ```
@@ -227,7 +207,7 @@ helm install|upgrade documentserver onlyoffice/docs \
 
 ## Completely Disable Plugins Directory
 
-You can completely disable default plugins and the "Plugin Manager".
+You can completely disable default plugins.
 
 > **Note:**\
 > The Job `custom-resources` is not created in this case.

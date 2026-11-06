@@ -226,7 +226,7 @@ persistence:
   ## Persistence parameters for storing custom resources. It is used if `customFonts.build` or `customDictionaries.build` or `customPlugins.build` is set to `true`
   customResources:
     ## persistence.customResources.enabled Defines whether to use PVC and whether to mount it in a container in the Job `custom-resources`
-    ## The use of this PVC can be disabled if you only use `customPlugins.marketplace.enabled=false` or `customPlugins.defaultPlugins.list` or `customPlugins.defaultPlugins.enabled=false`
+    ## The use of this PVC can be disabled if you only use `customPlugins.defaultPlugins.list` or `customPlugins.defaultPlugins.enabled=false`
     ## For more details, see here:
     ## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs/blob/master/CUSTOM_RESOURCES.md
     enabled: true
@@ -469,10 +469,6 @@ customPlugins:
   ## pluginNames:
   ## - plugin-jitsi
   pluginNames: []
-  marketplace:
-    ## customPlugins.marketplace.enabled Defines whether the "Plugin Manager" will be added to the server and to the `Plugins` menu
-    ## It is executed if the `customPlugins.build` is set to `true`
-    enabled: true
   defaultPlugins:
     ## customPlugins.defaultPlugins.enabled Defines whether "plugins" will be installed on the server and in the `Plugins` menu
     ## It is executed if the `customPlugins.build` is set to `true`
@@ -481,7 +477,7 @@ customPlugins:
     ## It is executed if the `customPlugins.build` is set to `true`
     ## Example:
     ## emptyPluginsDir:
-    ## - ai
+    ## - highlightcode
     ## - photoeditor
     list: []
   ## customPlugins.emptyPluginsDir Defines whether a directory with plugins in containers will contain files, including service files
