@@ -20,6 +20,19 @@ on:
         required: true
 
 jobs:
+  pre-upgrade-hook-test:
+    name: pre-upgrade hook smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout chart
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Test pre-upgrade hook rendering
+        run: bash tests/pre-upgrade-hook.sh
+
   lint-chart:           
     name: lint chart ${{ github.event.repository.name }}
     uses: ONLYOFFICE/ga-common/.github/workflows/helm-lint.yaml@master
