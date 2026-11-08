@@ -187,6 +187,13 @@ spec:
               secretKeyRef:
                 name: {{ template "ds.rabbitmq.secretName" . }}
                 key: {{ .Values.connections.amqpSecretKeyName }}
+          {{- if .Values.connections.amqpUserExistingSecret }}
+          - name: AMQP_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ tpl .Values.connections.amqpUserExistingSecret $ }}
+                key: {{ .Values.connections.amqpUserSecretKeyName }}
+          {{- end }}
           - name: REDIS_SERVER_PWD
             valueFrom:
               secretKeyRef:

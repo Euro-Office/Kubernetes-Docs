@@ -110,6 +110,14 @@ connections:
   amqpVhost: "/"
   ## connections.amqpUser The username for the AMQP server account
   amqpUser: user
+  ## connections.amqpUserExistingSecret The name of existing secret to use for the AMQP server username
+  ## If set to, `connections.amqpUser` is ignored and `AMQP_USER` is taken from this secret instead of the `documentserver` ConfigMap
+  ## Must contain the key specified in `connections.amqpUserSecretKeyName`
+  ## Do not also set `AMQP_USER` via `docservice.extraEnvVars` / `converter.extraEnvVars` / `adminpanel.extraEnvVars` when this option is used
+  ## (duplicate env names; server-side apply in Argo CD can reject duplicate list keys)
+  amqpUserExistingSecret: ""
+  ## connections.amqpUserSecretKeyName The name of the key that contains the AMQP server username
+  amqpUserSecretKeyName: rabbitmq-user
   ## connections.amqpProto The protocol for the connection to AMQP server
   amqpProto: amqp
   ## connections.amqpExistingSecret The name of existing secret to use for AMQP server passwords

@@ -97,6 +97,13 @@ spec:
         args:
         - adminpanel
         env:
+        {{- if .Values.connections.amqpUserExistingSecret }}
+        - name: AMQP_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ tpl .Values.connections.amqpUserExistingSecret $ }}
+              key: {{ .Values.connections.amqpUserSecretKeyName }}
+        {{- end }}
         - name: REDIS_SERVER_PWD
           valueFrom:
             secretKeyRef:

@@ -5,6 +5,7 @@
 ### New Features
 
 * Added the ability to set `revisionHistoryLimit` for the Docservice, Converter, Adminpanel and Example workloads (`docservice.revisionHistoryLimit`, `converter.revisionHistoryLimit`, `adminpanel.revisionHistoryLimit`, `example.revisionHistoryLimit`)
+* Added the ability to take the AMQP username from an existing Secret (`connections.amqpUserExistingSecret`, `connections.amqpUserSecretKeyName`); when set, `AMQP_USER` is no longer rendered in the `documentserver` ConfigMap
 
 ## 6.0.0
 

@@ -35,7 +35,9 @@ data:
   AMQP_PORT: {{ .Values.connections.amqpPort | quote }}
   AMQP_VHOST: {{ .Values.connections.amqpVhost | quote }}
   AMQP_HOST: {{ .Values.connections.amqpHost }}
+  {{- if not .Values.connections.amqpUserExistingSecret }}
   AMQP_USER: {{ .Values.connections.amqpUser }}
+  {{- end }}
   AMQP_PROTO: {{ .Values.connections.amqpProto }}
   METRICS_ENABLED: {{ .Values.metrics.enabled | quote }}
   {{- if .Values.metrics.enabled }}
