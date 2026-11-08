@@ -14,6 +14,9 @@ metadata:
   annotations: {{- include "ds.annotations.commonAnnotations" ( dict "keyName" $dictValue "context" $ ) | nindent 4 }}
   {{- end }}
 spec:
+  {{- if not (kindIs "invalid" .Values.adminpanel.revisionHistoryLimit) }}
+  revisionHistoryLimit: {{ .Values.adminpanel.revisionHistoryLimit }}
+  {{- end }}
   selector:
     matchLabels:
       app: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "adminpanel") }}

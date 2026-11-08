@@ -506,6 +506,9 @@ docservice:
   ## docservice.replicas Number of Docservice replicas to deploy
   ## If the `docservice.autoscaling.enabled` parameter is enabled, it is ignored
   replicas: 2
+  ## docservice.revisionHistoryLimit The number of old ReplicaSets to retain to allow rollback
+  ## If not set (`null`), the Kubernetes default is used (10). `0` is a valid value
+  revisionHistoryLimit: null
   ## Update strategy used to replace old Pods by new ones. Allowed values: `RollingUpdate` or `Recreate`
   ## For Docservice deployment, it is recommended to use the `Recreate` type
   ## docservice.updateStrategy.type Docservice deployment update strategy type
@@ -961,6 +964,9 @@ converter:
   ## converter.replicas Number of Converter replicas to deploy
   ## If the `converter.autoscaling.enabled` parameter is enabled, it is ignored
   replicas: 2
+  ## converter.revisionHistoryLimit The number of old ReplicaSets to retain to allow rollback
+  ## If not set (`null`), the Kubernetes default is used (10). `0` is a valid value
+  revisionHistoryLimit: null
   ## Update strategy used to replace old Pods by new ones. Allowed values: `RollingUpdate` or `Recreate`
   ## converter.updateStrategy.type Docservice deployment update strategy type
   updateStrategy:
@@ -1181,6 +1187,9 @@ adminpanel:
   ## adminpanel.podAnnotations Map of annotations to add to the Adminpanel deployment pod
   podAnnotations:
     rollme: "{{ randAlphaNum 5 | quote }}"
+  ## adminpanel.revisionHistoryLimit The number of old ControllerRevisions to retain to allow rollback
+  ## If not set (`null`), the Kubernetes default is used (10). `0` is a valid value
+  revisionHistoryLimit: null
   ## Update strategy used to replace old Pods by new ones. Allowed values: `RollingUpdate` or `OnDelete`
   ## adminpanel.updateStrategy.type Adminpanel StatefulSet update strategy type
   updateStrategy:
@@ -1350,6 +1359,9 @@ example:
   ## example.podAnnotations Map of annotations to add to the Example pod
   podAnnotations:
     rollme: "{{ randAlphaNum 5 | quote }}"
+  ## example.revisionHistoryLimit The number of old ControllerRevisions to retain to allow rollback
+  ## If not set (`null`), the Kubernetes default is used (10). `0` is a valid value
+  revisionHistoryLimit: null
   ## Update strategy used to replace old Pods by new ones. Allowed values: `RollingUpdate` or `OnDelete`
   ## example.updateStrategy.type Example StatefulSet update strategy type
   updateStrategy:

@@ -1,5 +1,11 @@
 # Change log
 
+## 6.1.0
+
+### New Features
+
+* Added the ability to set `revisionHistoryLimit` for the Docservice, Converter, Adminpanel and Example workloads (`docservice.revisionHistoryLimit`, `converter.revisionHistoryLimit`, `adminpanel.revisionHistoryLimit`, `example.revisionHistoryLimit`)
+
 ## 6.0.0
 
 ### New Features

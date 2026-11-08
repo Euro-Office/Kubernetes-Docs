@@ -16,6 +16,9 @@ spec:
   {{- if not .Values.converter.autoscaling.enabled }}
   replicas: {{ .Values.converter.replicas }}
   {{- end }}
+  {{- if not (kindIs "invalid" .Values.converter.revisionHistoryLimit) }}
+  revisionHistoryLimit: {{ .Values.converter.revisionHistoryLimit }}
+  {{- end }}
   selector:
     matchLabels:
       app: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "converter") }}

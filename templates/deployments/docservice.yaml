@@ -16,6 +16,9 @@ spec:
   {{- if not .Values.docservice.autoscaling.enabled }}
   replicas: {{ .Values.docservice.replicas }}
   {{- end }}
+  {{- if not (kindIs "invalid" .Values.docservice.revisionHistoryLimit) }}
+  revisionHistoryLimit: {{ .Values.docservice.revisionHistoryLimit }}
+  {{- end }}
   selector:
     matchLabels:
       app: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "docservice") }}
