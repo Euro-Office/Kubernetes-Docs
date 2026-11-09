@@ -36,12 +36,16 @@ spec:
         {{- if .Values.commonLabels }}
         {{- include "ds.labels.commonLabels" . | trim | nindent 8 }}
         {{- end }}
-      {{- if .Values.adminpanel.podAnnotations }}
       annotations:
+        {{- include "ds.annotations.checksums" (dict "podAnnotations" .Values.adminpanel.podAnnotations "checksums" (dict
+            "checksum/config" (include "ds.checksum.templates" (list . "configmaps/documentserver.yaml"))
+            "checksum/credentials" (include "ds.checksum.templates" (list . "secrets/redis-password.yaml" "secrets/redis-sentinel-password.yaml"))
+            "checksum/jwt" (include "ds.checksum.jwtInput" .)
+            "checksum/secure-link" (include "ds.checksum.secureLinkInput" .)
+        )) | trim | nindent 8 }}
         {{- range $key, $value := .Values.adminpanel.podAnnotations }}
         {{ $key }}: {{ tpl $value $ }}
         {{- end }}
-      {{- end }}
     spec:
       serviceAccountName: {{ include "ds.serviceAccountName" . }}
       {{- if .Values.podSecurityContext.enabled }}

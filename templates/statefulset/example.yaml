@@ -36,12 +36,14 @@ spec:
         {{- if .Values.commonLabels }}
         {{- include "ds.labels.commonLabels" . | trim | nindent 8 }}
         {{- end }}
-      {{- if .Values.example.podAnnotations }}
       annotations:
+        {{- include "ds.annotations.checksums" (dict "podAnnotations" .Values.example.podAnnotations "checksums" (dict
+            "checksum/config" (include "ds.checksum.templates" (list . "configmaps/example.yaml"))
+            "checksum/jwt" (include "ds.checksum.jwtInput" .)
+        )) | trim | nindent 8 }}
         {{- range $key, $value := .Values.example.podAnnotations }}
         {{ $key }}: {{ tpl $value $ }}
         {{- end }}
-      {{- end }}
     spec:
       serviceAccountName: {{ include "ds.serviceAccountName" . }}
       {{- if .Values.podSecurityContext.enabled }}

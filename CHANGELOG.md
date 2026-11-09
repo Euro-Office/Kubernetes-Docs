@@ -6,6 +6,17 @@
 
 * Added the ability to set `revisionHistoryLimit` for the Docservice, Converter, Adminpanel and Example workloads (`docservice.revisionHistoryLimit`, `converter.revisionHistoryLimit`, `adminpanel.revisionHistoryLimit`, `example.revisionHistoryLimit`)
 * Added the ability to take the AMQP username from an existing Secret (`connections.amqpUserExistingSecret`, `connections.amqpUserSecretKeyName`); when set, `AMQP_USER` is no longer rendered in the `documentserver` ConfigMap
+* Added `checksum/*` annotations to the Docservice, Converter, Adminpanel and Example Pod templates, so the Pods are restarted when the ConfigMaps and Secrets rendered by the chart change
+* Added `customResources.versionSalt` to force a new `DS_VERSION_HASH` after the content of the custom resources PVC changes
+
+### Changes
+
+* **Behavior change:** the default of `docservice.podAnnotations`, `converter.podAnnotations`, `adminpanel.podAnnotations` and `example.podAnnotations` is now `{}` instead of `rollme: "{{ randAlphaNum 5 | quote }}"`. Pods are no longer restarted on every `helm upgrade`, only when the hashed ConfigMaps/Secrets or the image change. Secrets and ConfigMaps not rendered by the chart (`*ExistingSecret`, WOPI keys, `extraConf`, `extraThemes`) and the custom resources PVC content require Stakater Reloader, versioned names or a change of `customResources.versionSalt`. The previous behavior can be restored by setting `rollme: "{{ randAlphaNum 5 | quote }}"` in `*.podAnnotations`
+* `DS_VERSION_HASH` is no longer derived from the current time. It is computed from the image tag, the `customFonts` / `customDictionaries` / `customPlugins` settings and `customResources.versionSalt`, so the rendered output is deterministic (required for Argo CD)
+
+### Fixes
+
+* Fixed perpetual OutOfSync and unneeded rollouts under Argo CD caused by `rollme` and the time-based `DS_VERSION_HASH`
 
 ## 6.0.0
 

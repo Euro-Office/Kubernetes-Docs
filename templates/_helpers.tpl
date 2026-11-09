@@ -652,3 +652,50 @@ Get the Secret value
     {{- printf "%s" $existValue -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Concatenate the rendered output of the given chart templates.
+Usage: include "ds.checksum.templates" (list . "configmaps/documentserver.yaml" ...)
+*/}}
+{{- define "ds.checksum.templates" -}}
+{{- $context := first . -}}
+{{- range rest . -}}
+{{- include (print $context.Template.BasePath "/" .) $context -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Deterministic inputs of the Secrets that use ds.secrets.lookup (their rendered output is random
+under `helm template`, so the input values are used instead). Empty if the Secret is not created by the chart
+*/}}
+{{- define "ds.checksum.jwtInput" -}}
+{{- if eq (include "ds.jwt.createSecret" .) "true" -}}
+{{- toJson .Values.jwt -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "ds.checksum.secureLinkInput" -}}
+{{- if eq (include "ds.secureLinkSecret.createSecret" .) "true" -}}
+{{- .Values.proxy.secureLinkSecret -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "ds.checksum.infoAuthInput" -}}
+{{- if eq (include "ds.info.createSecret" .) "true" -}}
+{{- .Values.proxy.infoAllowedPassword -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Render checksum annotations for the pod template. Entries with empty input are skipped.
+A key that is also set in the user podAnnotations is skipped, so the user value wins and no duplicate key is rendered.
+Usage: include "ds.annotations.checksums" (dict "podAnnotations" .Values.docservice.podAnnotations "checksums" (dict "checksum/config" "<input>"))
+*/}}
+{{- define "ds.annotations.checksums" -}}
+{{- $user := default dict .podAnnotations -}}
+{{- range $key, $input := .checksums }}
+{{- if and $input (not (hasKey $user $key)) }}
+{{ $key }}: {{ $input | sha256sum }}
+{{- end }}
+{{- end }}
+{{- end -}}

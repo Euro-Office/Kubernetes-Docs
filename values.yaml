@@ -509,8 +509,9 @@ docservice:
   ## You can also use `tpl` as the value for the key
   annotations: {}
   ## docservice.podAnnotations Map of annotations to add to the Docservice deployment pods
-  podAnnotations:
-    rollme: "{{ randAlphaNum 5 | quote }}"
+  ## Checksum annotations (`checksum/*`) for the resources rendered by this chart are added automatically; a key set here takes priority
+  ## To restart the pods on every render, set `rollme: "{{ randAlphaNum 5 | quote }}"` (not deterministic, not recommended with Argo CD)
+  podAnnotations: {}
   ## docservice.replicas Number of Docservice replicas to deploy
   ## If the `docservice.autoscaling.enabled` parameter is enabled, it is ignored
   replicas: 2
@@ -967,8 +968,9 @@ converter:
   ## You can also use `tpl` as the value for the key
   annotations: {}
   ## converter.podAnnotations Map of annotations to add to the Converter deployment pods
-  podAnnotations:
-    rollme: "{{ randAlphaNum 5 | quote }}"
+  ## Checksum annotations (`checksum/*`) for the resources rendered by this chart are added automatically; a key set here takes priority
+  ## To restart the pods on every render, set `rollme: "{{ randAlphaNum 5 | quote }}"` (not deterministic, not recommended with Argo CD)
+  podAnnotations: {}
   ## converter.replicas Number of Converter replicas to deploy
   ## If the `converter.autoscaling.enabled` parameter is enabled, it is ignored
   replicas: 2
@@ -1193,8 +1195,9 @@ adminpanel:
   ## You can also use `tpl` as the value for the key
   annotations: {}
   ## adminpanel.podAnnotations Map of annotations to add to the Adminpanel deployment pod
-  podAnnotations:
-    rollme: "{{ randAlphaNum 5 | quote }}"
+  ## Checksum annotations (`checksum/*`) for the resources rendered by this chart are added automatically; a key set here takes priority
+  ## To restart the pods on every render, set `rollme: "{{ randAlphaNum 5 | quote }}"` (not deterministic, not recommended with Argo CD)
+  podAnnotations: {}
   ## adminpanel.revisionHistoryLimit The number of old ControllerRevisions to retain to allow rollback
   ## If not set (`null`), the Kubernetes default is used (10). `0` is a valid value
   revisionHistoryLimit: null
@@ -1365,8 +1368,9 @@ example:
   ## You can also use `tpl` as the value for the key
   annotations: {}
   ## example.podAnnotations Map of annotations to add to the Example pod
-  podAnnotations:
-    rollme: "{{ randAlphaNum 5 | quote }}"
+  ## Checksum annotations (`checksum/*`) for the resources rendered by this chart are added automatically; a key set here takes priority
+  ## To restart the pods on every render, set `rollme: "{{ randAlphaNum 5 | quote }}"` (not deterministic, not recommended with Argo CD)
+  podAnnotations: {}
   ## example.revisionHistoryLimit The number of old ControllerRevisions to retain to allow rollback
   ## If not set (`null`), the Kubernetes default is used (10). `0` is a valid value
   revisionHistoryLimit: null
@@ -2302,6 +2306,10 @@ wopiKeysDeletion:
 ## For more details, see here:
 ## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs/blob/master/CUSTOM_RESOURCES.md
 customResources:
+  ## customResources.versionSalt Arbitrary string included in the `DS_VERSION_HASH` input
+  ## The chart cannot see the content of the `persistence.customResources` PVC. After changing it, change this value in Git to get a new `DS_VERSION_HASH`
+  ## (so that browsers fetch the new assets) and to roll the Pods. Used only if a `*.build` parameter is set to `true`
+  versionSalt: ""
   job:
     ## customResources.job.annotations Defines annotations that will be additionally added to custom-resources Job
     ## If set to, it takes priority over the `commonAnnotations`

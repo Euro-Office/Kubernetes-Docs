@@ -35,12 +35,16 @@ spec:
         {{- if .Values.commonLabels }}
         {{- include "ds.labels.commonLabels" . | trim | nindent 8 }}
         {{- end }}
-      {{- if .Values.converter.podAnnotations }}
       annotations:
+        {{- include "ds.annotations.checksums" (dict "podAnnotations" .Values.converter.podAnnotations "checksums" (dict
+            "checksum/config" (include "ds.checksum.templates" (list . "configmaps/documentserver.yaml"))
+            "checksum/credentials" (include "ds.checksum.templates" (list . "secrets/db-password.yaml" "secrets/rabbitmq-password.yaml" "secrets/redis-password.yaml" "secrets/redis-sentinel-password.yaml"))
+            "checksum/jwt" (include "ds.checksum.jwtInput" .)
+            "checksum/secure-link" (include "ds.checksum.secureLinkInput" .)
+        )) | trim | nindent 8 }}
         {{- range $key, $value := .Values.converter.podAnnotations }}
         {{ $key }}: {{ tpl $value $ }}
         {{- end }}
-      {{- end }}
     spec:
       serviceAccountName: {{ include "ds.serviceAccountName" . }}
       {{- if .Values.podSecurityContext.enabled }}
