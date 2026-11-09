@@ -22,15 +22,15 @@ on:
 jobs:
   lint-chart:           
     name: lint chart ${{ github.event.repository.name }}
-    uses: ONLYOFFICE/ga-common/.github/workflows/helm-lint.yaml@master
+    uses: ./.github/workflows/reusable-helm-lint.yaml
     with: 
-      ct_version: 3.8.0
+      ct_version: 3.15.0
       enable_yaml_lint: true
       enable_kube_lint: true
 
   validate-manifests:
     name: "k8s manifests api validation"
-    uses: ONLYOFFICE/ga-common/.github/workflows/deprecated-recources.yaml@master
+    uses: ./.github/workflows/reusable-validate-manifests.yaml
     with:
       manual_k8s: ${{ github.event.inputs.kubernetes_version }}
       set_keys: |

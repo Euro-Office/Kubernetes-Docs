@@ -1,0 +1,76 @@
+# Vendored from https://github.com/ONLYOFFICE/ga-common
+# Source path: .github/workflows/helm-lint.yaml
+# Upstream commit: 936e679e0ebe1a52464bbde2535c6d940973c2c5 (master at copy time); file last changed in 3f4517d9da127e1be17b060e9ca13c6c4576199b
+# Local modifications: runs on a pinned runner image, Python 3.15.2, exactly pinned latest tool versions (helm, ct incl. SHA-256, yamllint, yamale, kube-linter),
+# actions bumped to Node 24 versions,
+# lint configs are read from .github/config/ instead of being downloaded at runtime, kube-linter is pinned.
+name: Lint and Test Charts
+
+on:
+  workflow_call:
+    inputs:
+      ct_version:
+        description: 'Chart testing tool version'
+        required: false
+        type: string
+        default: '3.15.0'
+      ct_sha256:
+        description: 'SHA-256 of the chart-testing linux_amd64 tarball for ct_version'
+        required: false
+        type: string
+        default: '467561730f25fe09d5e6cd09a3e1f6aa759871c657a57602947c716d9be2c583'
+      enable_yaml_lint:
+        type: boolean
+        description: 'Enable or disable yaml linter'
+        default: true
+      enable_kube_lint:
+        type: boolean
+        description: 'Enable or disable kube manifests linter'
+        default: true
+
+env:
+  LINT_CONF: '.github/config/lintconf.yaml'
+  KUBELINT_CONF: '.github/config/.kube-linter.yaml'
+  CHART_SCHEMA: '.github/config/chart_schema.yaml'
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout chart
+        uses: actions/checkout@v7
+
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.22.1
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.15.2'
+
+      - name: Prepare unit tests environment
+        env:
+          CT_TARBALL: chart-testing_${{ inputs.ct_version }}_linux_amd64.tar.gz
+        run: |
+           pip install yamllint==1.38.0 yamale==6.1.0
+           wget "https://github.com/helm/chart-testing/releases/download/v${{ inputs.ct_version }}/${CT_TARBALL}"
+           echo "${{ inputs.ct_sha256 }}  ${CT_TARBALL}" | sha256sum --check --strict
+           tar -xvzf "${CT_TARBALL}" ct
+           rm -rf "./${CT_TARBALL}"
+
+      - name: lint
+        if: ${{ inputs.enable_yaml_lint == true }}
+        run: |
+          ./ct lint --charts . --validate-maintainers=false \
+            --lint-conf "${LINT_CONF}" --chart-yaml-schema "${CHART_SCHEMA}"
+
+      - name: Scan chart with kube-linter
+        if: ${{ inputs.enable_kube_lint == true }}
+        uses: stackrox/kube-linter-action@87802a2f4e01abebb3ee3c67a3002fea71f6eae5 # v1.0.7
+        with:
+          directory: .
+          config: ${{ env.KUBELINT_CONF }}
+          format: plain
+          output-file: kube-linter.plain
+          version: v0.8.3
