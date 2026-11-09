@@ -1,0 +1,46 @@
+# Vendored from https://github.com/ONLYOFFICE/ga-common
+# Source path: .github/config/lintconf.yaml
+# Upstream commit: 936e679e0ebe1a52464bbde2535c6d940973c2c5 (master at copy time); file last changed in 33ef2d59c304b411b91ec5550af2aa0c6e870ba1
+# Local modifications: none (content below is verbatim).
+---
+rules:
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 0
+    min-spaces-inside-empty: -1
+    max-spaces-inside-empty: -1
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 0
+    min-spaces-inside-empty: -1
+    max-spaces-inside-empty: -1
+  colons:
+    max-spaces-before: 0
+    max-spaces-after: 1
+  commas:
+    max-spaces-before: 0
+    min-spaces-after: 1
+    max-spaces-after: 1
+  comments:
+    require-starting-space: true
+    min-spaces-from-content: 1
+  document-end: disable
+  document-start: disable           # No --- to start a file
+  empty-lines:
+    max: 2
+    max-start: 0
+    max-end: 0
+  hyphens:
+    max-spaces-after: 1
+  indentation:
+    spaces: consistent
+    indent-sequences: whatever      # - list indentation will handle both indentation and without
+    check-multi-line-strings: false
+  key-duplicates: enable
+  line-length: disable              # Lines can be any length
+  new-line-at-end-of-file: enable
+  new-lines:
+    type: unix
+  trailing-spaces: enable
+  truthy:
+    level: warning
