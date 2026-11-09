@@ -1,0 +1,17 @@
+# Vendored from https://github.com/ONLYOFFICE/ga-common
+# Source path: .github/config/.kube-linter.yaml
+# Upstream commit: 936e679e0ebe1a52464bbde2535c6d940973c2c5 (master at copy time); file last changed in 23233029c8daa08e81b0cc47238f5daba0255d54
+# Local modifications: none (content below is verbatim).
+checks:
+  doNotAutoAddDefaults: true
+  include:
+    - "dangling-horizontalpodautoscaler"
+    - "dangling-ingress"
+   #- "dangling-service"
+    - "deprecated-service-account-field"
+    - "docker-sock"
+    - "duplicate-env-var"
+    - "env-var-secret"
+    - "invalid-target-ports"
+   #- "latest-tag"
+   #- "privileged-ports"
