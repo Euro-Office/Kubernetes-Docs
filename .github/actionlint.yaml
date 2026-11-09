@@ -1,0 +1,5 @@
+# actionlint configuration (https://github.com/rhysd/actionlint/blob/main/docs/config.md)
+# Declare GitHub-hosted runner labels that the bundled actionlint release does not know yet.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

@@ -27,12 +27,12 @@ env:
 jobs:
   selective-check:
     name: selective-check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       images-present: ${{ steps.selective-check.outputs.images-present }}
     steps:
       - name: Checkout chart
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: selective-check
         id: selective-check
         run: |
@@ -50,33 +50,37 @@ jobs:
 
   spin-up:
     name: integration-test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [selective-check]
     if: needs.selective-check.outputs.images-present == 'true'
     steps:
       - name: Checkout chart
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v7
         with:
-          python-version: '3.9'
-          check-latest: true
+          python-version: '3.15.2'
 
-      - uses: azure/setup-helm@v3
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         id: setup-helm
         with:
-          version: 'latest'
+          version: 'v3.22.1'
           token: ${{ secrets.GITHUB_TOKEN }} 
 
       - name: Setup minikube
         id: minikube
-        uses: medyagh/setup-minikube@latest
+        uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21
         with:
           cpus: 2
           memory: 6200
 
       - name: Set up chart-testing
-        uses: helm/chart-testing-action@v2.6.1
+        uses: helm/chart-testing-action@720270857a28afd41e2426521a7801db09e9b510 # v2.9.0
+        with:
+          version: '3.15.0'
+          yamllint_version: '1.38.0'
+          yamale_version: '6.1.0'
+          uv_version: '0.13.7'
 
       - name: Start deploy
         run: | 
