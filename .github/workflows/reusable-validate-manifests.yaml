@@ -62,13 +62,15 @@ jobs:
           memory: 6500m
           kubernetes-version: ${{ env.kube-latest }}
 
+      # pluto is installed outside the chart directory: Helm refuses chart files
+      # larger than 5 MiB, so a pluto binary in the repo root breaks `helm template`.
       - name: Setup pluto
         run: |
-            wget https://github.com/FairwindsOps/pluto/releases/download/v${PLUTO_VER}/pluto_${PLUTO_VER}_linux_amd64.tar.gz
-            echo "${{ inputs.pluto_sha256 }}  pluto_${PLUTO_VER}_linux_amd64.tar.gz" | sha256sum --check --strict
-            tar -zxvf pluto_${PLUTO_VER}_linux_amd64.tar.gz
-            chmod +x pluto
-            sudo cp pluto /bin/pluto
+            mkdir -p "${RUNNER_TEMP}/pluto"
+            wget -P "${RUNNER_TEMP}/pluto" "https://github.com/FairwindsOps/pluto/releases/download/v${PLUTO_VER}/pluto_${PLUTO_VER}_linux_amd64.tar.gz"
+            echo "${{ inputs.pluto_sha256 }}  ${RUNNER_TEMP}/pluto/pluto_${PLUTO_VER}_linux_amd64.tar.gz" | sha256sum --check --strict
+            tar -zxvf "${RUNNER_TEMP}/pluto/pluto_${PLUTO_VER}_linux_amd64.tar.gz" -C "${RUNNER_TEMP}/pluto" pluto
+            sudo install -m 0755 "${RUNNER_TEMP}/pluto/pluto" /usr/local/bin/pluto
 
       - name: Manifests validation INFO
         id: check-manifests

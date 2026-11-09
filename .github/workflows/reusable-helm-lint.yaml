@@ -49,20 +49,23 @@ jobs:
         with:
           python-version: '3.15.2'
 
+      # ct is installed outside the chart directory: Helm refuses chart files
+      # larger than 5 MiB, so a ct binary in the repo root breaks
+      # `helm dependency build` (and `ct lint`).
       - name: Prepare unit tests environment
         env:
           CT_TARBALL: chart-testing_${{ inputs.ct_version }}_linux_amd64.tar.gz
         run: |
            pip install yamllint==1.38.0 yamale==6.1.0
-           wget "https://github.com/helm/chart-testing/releases/download/v${{ inputs.ct_version }}/${CT_TARBALL}"
-           echo "${{ inputs.ct_sha256 }}  ${CT_TARBALL}" | sha256sum --check --strict
-           tar -xvzf "${CT_TARBALL}" ct
-           rm -rf "./${CT_TARBALL}"
+           mkdir -p "${RUNNER_TEMP}/ct"
+           wget -P "${RUNNER_TEMP}/ct" "https://github.com/helm/chart-testing/releases/download/v${{ inputs.ct_version }}/${CT_TARBALL}"
+           echo "${{ inputs.ct_sha256 }}  ${RUNNER_TEMP}/ct/${CT_TARBALL}" | sha256sum --check --strict
+           tar -xvzf "${RUNNER_TEMP}/ct/${CT_TARBALL}" -C "${RUNNER_TEMP}/ct" ct
 
       - name: lint
         if: ${{ inputs.enable_yaml_lint == true }}
         run: |
-          ./ct lint --charts . --validate-maintainers=false \
+          "${RUNNER_TEMP}/ct/ct" lint --charts . --validate-maintainers=false \
             --lint-conf "${LINT_CONF}" --chart-yaml-schema "${CHART_SCHEMA}"
 
       - name: Scan chart with kube-linter
