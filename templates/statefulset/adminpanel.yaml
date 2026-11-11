@@ -94,18 +94,8 @@ spec:
         args:
         - adminpanel
         env:
-        - name: REDIS_SERVER_PWD
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "ds.redis.secretName" . }}
-              key: {{ .Values.connections.redisSecretKeyName }}
-        {{- if eq .Values.connections.redisConnectorName "ioredis" }}
-        - name: REDIS_SENTINEL_PWD
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "ds.redis.sentinel.secretName" . }}
-              key: {{ .Values.connections.redisSentinelSecretKeyName }}
-        {{- end }}
+        {{ include "ds.redis.env" . | nindent 8 }}
+        {{ include "ds.redis.ca.env" (dict "context" . "extraEnvVars" .Values.adminpanel.extraEnvVars) | nindent 8 }}
         {{- with .Values.adminpanel.extraEnvVars }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -154,6 +144,7 @@ spec:
           {{- with .Values.adminpanel.extraVolumeMounts }}
           {{- toYaml . | nindent 10 }}
           {{- end }}
+          {{ include "ds.redis.ca.mount" . | nindent 10 }}
       volumes:
         {{- if not .Values.persistence.storageS3 }}
         - name: ds-files
@@ -181,4 +172,5 @@ spec:
         {{- with .Values.adminpanel.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{ include "ds.redis.ca.volume" . | nindent 8 }}
 {{- end }}

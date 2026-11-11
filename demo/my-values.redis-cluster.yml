@@ -1,0 +1,19 @@
+# Apply together with my-values.yml after providing a reachable Redis Cluster
+# deployment. This file does not deploy a Redis Cluster itself.
+#
+# helm install docs .. -n euro-office -f my-values.yml -f my-values.redis-cluster.yml
+
+docservice:
+  editorDataStorage: cluster
+  editorStatStorage: cluster
+
+connections:
+  # Startup/readiness fallback endpoint. Cluster discovery uses redisClusterNodes.
+  redisHost: redis-cluster-0.euro-office.svc.cluster.local
+  redisPort: 6379
+  redisClusterNodes:
+    - redis-cluster-0.euro-office.svc.cluster.local:6379
+    - redis-cluster-1.euro-office.svc.cluster.local:6379
+    - redis-cluster-2.euro-office.svc.cluster.local:6379
+  # Redis Cluster does not support selecting a non-zero logical database.
+  redisDBNum: "0"
