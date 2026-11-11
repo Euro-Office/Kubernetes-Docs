@@ -1,0 +1,47 @@
+name: Publish Helm chart
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Publish chart to GHCR
+    if: startsWith(github.event.release.tag_name, 'v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v5
+
+      - name: Validate chart
+        id: chart
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="$(awk '$1 == "version:" { print $2; exit }' Chart.yaml)"
+          test "$version" = "${RELEASE_TAG#v}"
+
+          helm lint .
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Package and push chart to GHCR
+        uses: appany/helm-oci-chart-releaser@v0.5.0
+        with:
+          name: docs
+          repository: ${{ github.repository_owner }}/charts
+          tag: ${{ steps.chart.outputs.version }}
+          path: .
+          registry: ghcr.io
+          registry_username: ${{ github.actor }}
+          registry_password: ${{ secrets.GITHUB_TOKEN }}
