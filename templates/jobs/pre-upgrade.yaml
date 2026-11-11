@@ -1,4 +1,4 @@
-{{- if .Values.upgrade.job.enabled }}
+{{- if and .Values.upgrade.job.enabled .Release.IsUpgrade }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -64,6 +64,12 @@ spec:
           configMap:
             name: {{ template "ds.upgrade.configMapName" . }}
             defaultMode: 0755
+        - name: documentserver-config
+          configMap:
+            # Argo CD runs pre-upgrade hooks before regular resources on the first sync.
+            # Keep this optional so the initial install can complete without Docservice.
+            name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "documentserver") }}
+            optional: true
         {{- if and .Values.privateCluster (not .Values.upgrade.existingConfigmap.dsStop) }}
         - name: remove-dt-scripts
           configMap:
@@ -96,6 +102,9 @@ spec:
           - name: stop-scripts
             mountPath: /scripts/stop.sh
             subPath: stop.sh
+          - name: documentserver-config
+            mountPath: /documentserver-config
+            readOnly: true
           {{- if and .Values.privateCluster (not .Values.upgrade.existingConfigmap.dsStop) }}
           - name: remove-dt-scripts
             mountPath: /scripts/{{ .Values.upgrade.existingConfigmap.tblRemove.keyName }}
@@ -105,10 +114,16 @@ spec:
             subPath: {{ .Values.upgrade.existingConfigmap.tblCreate.keyName }}
           {{- end }}
           command: ["/bin/sh", "-c"]
-          {{- if .Values.webProxy.enabled }}
-          args: ["http_proxy={{ .Values.webProxy.http }} https_proxy={{ .Values.webProxy.https }} no_proxy={{ .Values.webProxy.noProxy }} /scripts/stop.sh"]
-          {{- else }}
-          args: ["/scripts/stop.sh"]
-          {{- end }}          
+          args:
+          - |
+            if [ ! -f /documentserver-config/APPLICATION_NAME ]; then
+              echo "The documentserver ConfigMap is not present; skipping pre-upgrade actions for the initial installation."
+              exit 0
+            fi
+            {{ if .Values.webProxy.enabled }}
+            http_proxy={{ .Values.webProxy.http }} https_proxy={{ .Values.webProxy.https }} no_proxy={{ .Values.webProxy.noProxy }} /scripts/stop.sh
+            {{ else }}
+            /scripts/stop.sh
+            {{ end }}
       restartPolicy: Never
 {{- end }}
