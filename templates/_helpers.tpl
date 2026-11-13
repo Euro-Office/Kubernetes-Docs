@@ -719,3 +719,86 @@ Usage: include "ds.annotations.checksums" (dict "podAnnotations" .Values.docserv
 {{- end }}
 {{- end }}
 {{- end -}}
+
+{{/*
+Version gate for the pre-upgrade and pre-rollback jobs.
+The numeric version of the target docservice tag: a leading "v" is stripped and the numeric prefix is taken, optionally
+followed by a "-<suffix>" (v9.3.7-1 and 9.3.7-rc.1 give 9.3.7). Empty for tags without a numeric version (nightly, latest).
+*/}}
+{{- define "ds.versionGate.version" -}}
+{{- $tag := default .Values.images.tag .Values.docservice.image.tag | toString | trimPrefix "v" -}}
+{{- $num := regexFind "^[0-9]+(\\.[0-9]+)+" $tag -}}
+{{- $rest := trimPrefix $num $tag -}}
+{{- if and $num (or (eq $rest "") (hasPrefix "-" $rest)) -}}
+{{- $num -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Environment of the version gate. OLD_* values are those of the release that is running now: the `documentserver`
+ConfigMap is not a hook, so it still has the old values while the pre-upgrade/pre-rollback hooks run.
+The TARGET_DB_* values use the same expressions as the `documentserver` ConfigMap.
+*/}}
+{{- define "ds.versionGate.env" -}}
+{{- $cm := include "ds.resources.name" (list . .Values.commonNameSuffix "documentserver") -}}
+- name: TARGET_TAG
+  value: {{ default .Values.images.tag .Values.docservice.image.tag | quote }}
+- name: CONVERTER_TAG
+  value: {{ default .Values.images.tag .Values.converter.image.tag | quote }}
+- name: TARGET_VERSION
+  value: {{ include "ds.versionGate.version" . | quote }}
+- name: OLD_TAG
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cm }}
+      key: STORAGE_SUBDIRECTORY_NAME
+      optional: true
+- name: TARGET_DB_TYPE
+  value: {{ include "ds.db.type" . | quote }}
+- name: TARGET_DB_HOST
+  value: {{ .Values.connections.dbHost | quote }}
+- name: TARGET_DB_PORT
+  value: {{ .Values.connections.dbPort | quote }}
+- name: TARGET_DB_NAME
+  value: {{ .Values.connections.dbName | quote }}
+- name: TARGET_DB_USER
+  value: {{ .Values.connections.dbUser | quote }}
+{{- range $key := list "DB_TYPE" "DB_HOST" "DB_PORT" "DB_NAME" "DB_USER" }}
+- name: OLD_{{ $key }}
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cm }}
+      key: {{ $key }}
+      optional: true
+{{- end }}
+{{- end -}}
+
+{{/*
+Version gate script. Exits 0 (nothing to do) only if the old and the target docservice tags are equal, the converter tag
+is the target tag, the database connection (type, host, port, name and, if known, user) is unchanged, and all samples of
+/index.html (the Service balances them over the docservice Pods) report the target version. In every other case,
+including an unreachable server or a missing old value, the script continues with the full procedure.
+*/}}
+{{- define "ds.versionGate.script" -}}
+# Version gate: nothing to stop or reset if the version and the database do not change
+version_unchanged() {
+  [ -n "${TARGET_VERSION}" ] && [ -n "${OLD_TAG}" ] && [ "${OLD_TAG}" = "${TARGET_TAG}" ] && [ "${CONVERTER_TAG}" = "${TARGET_TAG}" ] || return 1
+  [ -n "${OLD_DB_TYPE}" ] && [ "${OLD_DB_TYPE}" = "${TARGET_DB_TYPE}" ] || return 1
+  [ -n "${OLD_DB_HOST}" ] && [ "${OLD_DB_HOST}" = "${TARGET_DB_HOST}" ] || return 1
+  [ -n "${OLD_DB_PORT}" ] && [ "${OLD_DB_PORT}" = "${TARGET_DB_PORT}" ] || return 1
+  [ -n "${OLD_DB_NAME}" ] && [ "${OLD_DB_NAME}" = "${TARGET_DB_NAME}" ] || return 1
+  [ -z "${OLD_DB_USER}" ] || [ "${OLD_DB_USER}" = "${TARGET_DB_USER}" ] || return 1
+  local page
+  for _ in 1 2 3 4 5; do
+    page="$(curl -sf --connect-timeout 3 --max-time 5 http://{{ include "ds.resources.name" (list . .Values.commonNameSuffix "docservice") }}:8000/index.html)" || return 1
+    case "${page}" in
+      *"Version: ${TARGET_VERSION}. Build:"*) ;;
+      *) return 1 ;;
+    esac
+  done
+}
+if version_unchanged; then
+  echo -e "\e[0;32m The version ${TARGET_VERSION} and the database are unchanged, the server is not stopped and the tables are not reset \e[0m"
+  exit 0
+fi
+{{- end -}}

@@ -1735,6 +1735,9 @@ upgrade:
   job:
     ## upgrade.job.enabled Enable the execution of job pre-upgrade before upgrading ONLYOFFICE Docs
     enabled: true
+    ## upgrade.job.skipWhenUnchanged Skip stopping the server and resetting the database tables if the version and the database connection do not change
+    ## The job pre-upgrade skips them only if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version; otherwise it runs as before
+    skipWhenUnchanged: true
     ## upgrade.job.annotations Defines annotations that will be additionally added to pre-upgrade Job
     ## If set to, it takes priority over the `commonAnnotations`
     ## You can also use `tpl` as the value for the key
@@ -1829,6 +1832,9 @@ rollback:
   job:
     ## rollback.job.enabled Enable the execution of job pre-rollback before rolling back ONLYOFFICE Docs
     enabled: true
+    ## rollback.job.skipWhenUnchanged Skip stopping the server and resetting the database tables if the version and the database connection do not change
+    ## The job pre-rollback skips them only if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version; otherwise it runs as before
+    skipWhenUnchanged: true
     ## rollback.job.annotations Defines annotations that will be additionally added to pre-rollback Job
     ## If set to, it takes priority over the `commonAnnotations`
     ## You can also use `tpl` as the value for the key
