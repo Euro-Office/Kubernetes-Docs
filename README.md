@@ -55,6 +55,9 @@ This repository contains a set of files to deploy Euro-Office Docs into a Kubern
   * [11. Run Jobs in a private k8s cluster (optional)](#11-run-jobs-in-a-private-k8s-cluster-optional)
   * [12. Access to the info page (optional)](#12-access-to-the-info-page-optional)
   * [13. Deploying with Argo CD / GitOps](#13-deploying-with-argo-cd--gitops)
+    + [13.1 Upgrade lifecycle](#131-upgrade-lifecycle)
+    + [13.2 Helm hooks under Argo CD](#132-helm-hooks-under-argo-cd)
+    + [13.3 Manual recovery](#133-manual-recovery)
 - [Using Grafana to visualize metrics (optional)](#using-grafana-to-visualize-metrics-optional)
   * [1. Deploy Grafana](#1-deploy-grafana)
     + [1.1 Deploy Grafana without installing ready-made dashboards](#11-deploy-grafana-without-installing-ready-made-dashboards)
@@ -1128,12 +1131,14 @@ Or modify the values.yaml file and run the command:
 $ helm upgrade documentserver -f values.yaml euro-office/docs
 ```
 
-Running the helm upgrade command runs a hook that shuts down the Euro-Office Docs and cleans up the database. This is needed when updating the version of Euro-Office Docs. The default hook execution time is 300s.
+Running the `helm upgrade` command runs the `pre-upgrade` job. If the version of Euro-Office Docs or the database connection changes, the job shuts down Euro-Office Docs and cleans up the database tables, and the `resume-server` job switches the server back on after the upgrade. If neither changes, the job detects this and does nothing (see [Upgrade lifecycle](#131-upgrade-lifecycle)). The default hook execution time is 300s.
 The execution time can be changed using --timeout [time], for example
 
 ```bash
 $ helm upgrade documentserver -f values.yaml euro-office/docs --timeout 15m
 ```
+
+  > **Note**: `resumeServer.job.deadlineSeconds` + 60 must stay below the `--timeout` value, see [Upgrade lifecycle](#131-upgrade-lifecycle)
 
 Note: When upgrading Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
 
@@ -1294,7 +1299,69 @@ Argo CD renders the chart with `helm template` on every refresh and compares the
 
 1. Set `jwt.existingSecret`, `proxy.secureLinkExistingSecret` and `proxy.infoAllowedExistingSecret`. Without them the chart-created Secrets fall back to a random value under `helm template` (no `lookup`), so they drift and are rotated on every render. A rotated JWT secret breaks integrations.
 2. The checksums cannot cover Secrets and ConfigMaps that are not rendered by the chart: `connections.*ExistingSecret`, `license.existingSecret`, the WOPI keys Secrets (created by a Job), `extraConf.configMap` and `extraThemes.configMap`. Use [Stakater Reloader](https://github.com/stakater/Reloader) for Secrets rotated outside Git, or versioned ConfigMap names (changed in Git) for ConfigMaps. The chart does not install Reloader.
-3. The chart cannot see the content of the `persistence.customResources` PVC. After changing fonts, plugins or dictionaries there, bump `customResources.versionSalt` in Git: the sync runs the `custom-resources` Job (PreSync hook), the changed `DS_VERSION_HASH` rolls the Pods, and browsers fetch the new assets. Without a Git change Argo CD does not sync, so the Job does not run and the hash does not change.
+3. The chart cannot see the content of the `persistence.customResources` PVC. **After every change of that content** (new, changed or removed fonts, plugins or dictionaries, also a replaced file with the same name) bump `customResources.versionSalt` in Git: the sync runs the `custom-resources` Job (PreSync hook), the changed `DS_VERSION_HASH` rolls the Pods, and browsers fetch the new assets. Without a Git change Argo CD does not sync, so the Job does not run and the hash does not change.
+   If the salt is not bumped, the `custom-resources` Job still rebuilds the buffer PVC on the next sync (if a `*.build` parameter is `true`, it runs on every pre-upgrade), but no rollout follows and the running Pods keep serving the old files. The Pods copy the buffer only when a container starts, so after a later restart of a single Pod the replicas serve different content under the same cache tag (`DS_VERSION_HASH`). The version gate does not skip the `custom-resources` Job.
+
+#### 13.1 Upgrade lifecycle
+
+On `helm upgrade` (and `helm rollback`) the chart runs these jobs around the update of the workloads:
+
+| Step | Hook | What it does |
+|---|---|---|
+| 1 | `pre-upgrade` / `pre-rollback` job | **Version gate**, then, only if the gate does not skip: switches the server off (`PUT /internal/cluster/inactive`, reaches all docservice Pods), checks the database and resets the database tables. `pre-rollback` also empties the cache directory |
+| 2 | the workloads are updated | Pods are replaced if their Pod template changed |
+| 3 | `post-upgrade` / `post-rollback` job `resume-server` | Switches the server back on (`DELETE /internal/cluster/inactive`) and checks the result |
+| 4 | `post-upgrade` job `clear-cache` | Clears the cache directory |
+
+**Why the server must be switched on again.** The switched-off state is a flag in the memory of every docservice process. It is cleared only by `DELETE /internal/cluster/inactive` or by restarting the Pod. Pods are no longer restarted on every upgrade, so the `resume-server` job sends the `DELETE`, then reads the state three times and sends the `DELETE` again only if the server is still switched off after `resumeServer.job.graceSeconds`. The job fails (exit code 1) only if the server answers and is still switched off at `resumeServer.job.deadlineSeconds`. If the server does not answer (for example Pods are still being replaced), it only prints a warning and succeeds: new Pods start switched on.
+
+**Version gate.** The `pre-upgrade` and `pre-rollback` jobs skip the switch-off and the table reset only if all of the following hold:
+- the old and the new docservice image tag are exactly equal (the old tag is read from the live `documentserver` ConfigMap, `STORAGE_SUBDIRECTORY_NAME`);
+- the converter image tag equals the docservice tag;
+- the database type, host, port and name are unchanged, and the database user is unchanged if the old one is known;
+- every one of five `GET /index.html` requests to the docservice Service reports the target version (the numeric part of the tag: `v9.3.7-1` gives `9.3.7`).
+
+Every uncertain case (a missing old value, a tag without a numeric version such as `nightly`, an unreachable server, any difference) runs the full procedure as before. A skipped run changes nothing: the server stays on and the tables are kept.
+
+**Forcing a full reset on purpose.** Run one upgrade (or rollback) with `--set upgrade.job.skipWhenUnchanged=false` (`rollback.job.skipWhenUnchanged=false` for a rollback). Under GitOps set it in Git for one sync and revert it afterwards. With the value `false` the jobs behave as in chart versions before 6.1.0.
+
+**Limitations of the gate.**
+- The old database user can only be compared if `DB_USER` is still in the `documentserver` ConfigMap. If it is not (for example it was moved to a Secret), a change of only the user is not detected.
+- The old converter image is not read from the cluster; the gate compares the rendered converter tag with the docservice tag. If you set a converter tag that is permanently different from the docservice tag, the gate never skips.
+- The gate does not look at other values. A change that needs a table reset without a version or database change needs a forced full run.
+
+**Timing.** Helm waits for each hook for at most `--timeout` (300s by default). The `resume-server` job is stopped by Kubernetes after `resumeServer.job.deadlineSeconds` + 60 seconds (the image pull counts), so `deadlineSeconds` + 60 must stay below the Helm `--timeout`. Raise both together. The `pre-upgrade` job can wait for running document saves for a long time (the server waits up to about 30 minutes), which is longer than the default `--timeout`; use a larger `--timeout` if you have long-running sessions.
+
+#### 13.2 Helm hooks under Argo CD
+
+Argo CD maps Helm hooks to its own hooks ([Helm hooks in the Argo CD documentation](https://argo-cd.readthedocs.io/en/stable/user-guide/helm/#helm-hooks)):
+
+| Helm hook | Argo CD | Chart jobs |
+|---|---|---|
+| `pre-install`, `pre-upgrade` | `PreSync` | `pre-install`, `pre-upgrade`, `custom-resources`, `wopi-keys-gen` |
+| `post-install`, `post-upgrade` | `PostSync` | `resume-server`, `clear-cache`, `dashboard` |
+| `pre-delete` | `PreDelete` | `pre-delete`, `wopi-keys-del` |
+| `pre-rollback`, `post-rollback` | **ignored** | `pre-rollback`, `resume-server` (rollback part) |
+| `helm.sh/hook-weight` | `sync-wave` | |
+
+- Argo CD cannot tell an install from an upgrade: every sync is one operation, so the `pre-install` and the `pre-upgrade` hooks run together on every sync.
+- A rollback in Argo CD is a sync to an older revision. It runs the `PreSync` and `PostSync` hooks, not the `pre-rollback`/`post-rollback` ones. The version gate and `resume-server` work the same way for it.
+- `resume-server` is a `PostSync` hook, so it runs after the workloads are synced. Because the gate skips the switch-off when nothing changes, a sync without a version or database change does not touch the running server.
+- If you define any Argo CD hook annotation yourself, Argo CD ignores all Helm hooks.
+- To skip the jobs for one sync, set `upgrade.job.enabled=false` (the `resume-server` job is then not rendered either, unless `rollback.job.enabled` is `true`).
+
+#### 13.3 Manual recovery
+
+If editors are refused after an upgrade, or the `resume-server` job reported that the server is still switched off, check and clear the state. The state is kept per Pod, and a `DELETE` sent to any Pod is published to all of them:
+
+```bash
+$ for pod in $(kubectl get pods -l app=docservice -o name); do
+    echo "$pod $(kubectl exec $pod -c docservice -- curl -s http://localhost:8000/internal/cluster/inactive)"
+  done
+$ kubectl exec deploy/docservice -c docservice -- curl -s --max-time 10 -X DELETE http://localhost:8000/internal/cluster/inactive
+```
+
+`{"shutdown":true}` means the server is switched off, `{"shutdown":false}` means it is on. Repeat the first command to confirm that every Pod reports `false`. The server publishes the new state as soon as it accepts the `DELETE`, but it answers only after it finished the earlier switch-off, which can take a long time; that is why the command stops waiting after 10 seconds. Do not send the `DELETE` repeatedly. Restarting the docservice Pods also clears the state.
 
 ## Using Grafana to visualize metrics (optional)
 
