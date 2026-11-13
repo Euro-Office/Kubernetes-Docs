@@ -443,6 +443,26 @@ Return true if a configmap object containing the ds clearCache script should be 
 {{- end -}}
 
 {{/*
+Get the configmap name containing the ds resumeServer script
+*/}}
+{{- define "ds.resumeServer.configMapName" -}}
+{{- if .Values.resumeServer.existingConfigmap.name -}}
+    {{- printf "%s" (tpl .Values.resumeServer.existingConfigmap.name $) -}}
+{{- else }}
+    {{- printf "%s" (include "ds.resources.name" (list . .Values.commonNameSuffix "resume-server")) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Return true if a configmap object containing the ds resumeServer script should be created
+*/}}
+{{- define "ds.resumeServer.createConfigMap" -}}
+{{- if empty .Values.resumeServer.existingConfigmap.name }}
+    {{- true -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Get the ds labels
 */}}
 {{- define "ds.labels.commonLabels" -}}

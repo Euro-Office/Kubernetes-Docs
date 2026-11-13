@@ -1,0 +1,118 @@
+{{- if and (eq (include "ds.resumeServer.createConfigMap" .) "true") .Values.resumeServer.job.enabled (or .Values.upgrade.job.enabled .Values.rollback.job.enabled) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "resume-server") }}
+  namespace: {{ include "ds.namespace" . | quote }}
+  {{- if .Values.commonLabels }}
+  labels:
+    {{- include "ds.labels.commonLabels" . | trim | nindent 4 }}
+  {{- end }}
+  annotations:
+    "helm.sh/hook": post-upgrade,post-rollback
+    "helm.sh/hook-weight": "-2"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- if .Values.commonAnnotations }}
+    {{- include "ds.annotations.commonAnnotations" ( dict "keyName" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+    {{- end }}
+data:
+  resume.sh: |-
+    #!/bin/bash
+    # Switches the document server back on after an upgrade or a rollback.
+    # The pre-upgrade/pre-rollback hooks switch it off (PUT /internal/cluster/inactive); the flag is kept
+    # in the memory of every docservice process and is cleared only by DELETE or by a restart of the Pod.
+    # The server publishes the new state to all docservice Pods first and only then waits (up to ~30 min) for
+    # the running saves to finish. Every DELETE starts a new server-side run (it also resets a shared counter),
+    # so the request is not repeated blindly: the result is verified with GET and DELETE is sent again
+    # only if the flag is still set after a grace period.
+    URL="http://{{ include "ds.resources.name" (list . .Values.commonNameSuffix "docservice") }}:8000/internal/cluster/inactive"
+    DEADLINE="${DEADLINE_SECONDS:-210}"
+    ATTEMPT="${ATTEMPT_TIMEOUT_SECONDS:-10}"
+    GRACE="${GRACE_SECONDS:-10}"
+    START="${SECONDS}"
+    deleted=0
+    deleted_at=0
+    backoff=2
+    PROBE=down
+
+    elapsed() { echo $((SECONDS - START)); }
+    log() { echo "[$(elapsed)s] $*"; }
+    pause() {
+      local remain=$((DEADLINE - $(elapsed)))
+      [ "$1" -gt "$remain" ] && set -- "$remain"
+      [ "$1" -gt 0 ] && sleep "$1"
+    }
+
+    # Sends DELETE. Returns 0 if the connection to a server was established (the state is published
+    # right after the request is accepted, a reply is not needed), 1 if no server could be reached.
+    send_delete() {
+      local limit="$1" out http tconn
+      [ "${limit}" -gt "${ATTEMPT}" ] && limit="${ATTEMPT}"
+      [ "${limit}" -lt 1 ] && limit=1
+      out="$(curl -s -o /dev/null --connect-timeout 5 --max-time "${limit}" -w '%{http_code} %{time_connect}' -X DELETE "${URL}")"
+      http="${out% *}"
+      tconn="${out#* }"
+      if [ "${http}" != "000" ] || [[ "${tconn}" =~ [1-9] ]]; then
+        return 0
+      fi
+      return 1
+    }
+
+    # Reads the state 3 times. PROBE=false: all answers are {"shutdown":false}; true: at least one answer is
+    # {"shutdown":true}; partial: some answers are missing; down: no answer at all.
+    probe() {
+      local body ok=0 answered=0 flagged=0
+      for _ in 1 2 3; do
+        body="$(curl -sf --connect-timeout 3 --max-time 5 "${URL}")" || continue
+        answered=$((answered + 1))
+        case "${body}" in
+          *'"shutdown":false'*) ok=$((ok + 1)) ;;
+          *'"shutdown":true'*) flagged=1 ;;
+        esac
+      done
+      if [ "${flagged}" -eq 1 ]; then PROBE=true
+      elif [ "${ok}" -eq 3 ]; then PROBE=false
+      elif [ "${answered}" -eq 0 ]; then PROBE=down
+      else PROBE=partial
+      fi
+    }
+
+    while [ "$(elapsed)" -lt "${DEADLINE}" ]; do
+      if [ "${deleted}" -eq 0 ]; then
+        log "Sending DELETE ${URL}"
+        if send_delete $((DEADLINE - $(elapsed))); then
+          deleted=1
+          deleted_at="$(elapsed)"
+          log "DELETE was accepted by the server"
+        else
+          log "The server is not reachable yet, retry in ${backoff}s"
+          pause "${backoff}"
+          backoff=$((backoff * 2))
+          [ "${backoff}" -gt 15 ] && backoff=15
+          continue
+        fi
+      fi
+      probe
+      if [ "${PROBE}" = "false" ]; then
+        echo -e "\e[0;32m The server is switched on \e[0m"
+        exit 0
+      fi
+      log "The server state is not confirmed yet (${PROBE})"
+      if [ "${PROBE}" = "true" ] && [ $(($(elapsed) - deleted_at)) -ge "${GRACE}" ]; then
+        log "The server is still switched off ${GRACE}s after DELETE, sending it again"
+        if send_delete $((DEADLINE - $(elapsed))); then
+          deleted_at="$(elapsed)"
+        fi
+      fi
+      pause 2
+    done
+
+    # The final decision uses the LAST probe: fail only if the server answered and is still switched off.
+    # No answer or a partial answer usually means that Pods are being replaced (they start switched on).
+    if [ "${PROBE}" = "true" ]; then
+      echo -e "\e[0;31m The server is still switched off after ${DEADLINE}s. Switch it on manually: curl -X DELETE ${URL} \e[0m"
+      exit 1
+    fi
+    echo -e "\e[0;33m WARNING: the server state could not be confirmed within ${DEADLINE}s (${PROBE}). Pods that are being replaced start switched on; if editors are refused later, run: curl -X DELETE ${URL} \e[0m"
+    exit 0
+{{- end }}
