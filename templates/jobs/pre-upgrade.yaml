@@ -85,6 +85,9 @@ spec:
           {{- end }}
           resources: {{- toYaml .Values.upgrade.job.resources | nindent 12 }}
           env:
+          {{- if .Values.upgrade.job.skipWhenUnchanged }}
+          {{- include "ds.versionGate.env" . | nindent 10 }}
+          {{- end }}
           - name: DB_PWD
             valueFrom:
               secretKeyRef:

@@ -14,6 +14,9 @@ metadata:
   annotations: {{- include "ds.annotations.commonAnnotations" ( dict "keyName" $dictValue "context" $ ) | nindent 4 }}
   {{- end }}
 spec:
+  {{- if not (kindIs "invalid" .Values.adminpanel.revisionHistoryLimit) }}
+  revisionHistoryLimit: {{ .Values.adminpanel.revisionHistoryLimit }}
+  {{- end }}
   selector:
     matchLabels:
       app: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "adminpanel") }}
@@ -33,12 +36,16 @@ spec:
         {{- if .Values.commonLabels }}
         {{- include "ds.labels.commonLabels" . | trim | nindent 8 }}
         {{- end }}
-      {{- if .Values.adminpanel.podAnnotations }}
       annotations:
+        {{- include "ds.annotations.checksums" (dict "podAnnotations" .Values.adminpanel.podAnnotations "checksums" (dict
+            "checksum/config" (include "ds.checksum.templates" (list . "configmaps/documentserver.yaml"))
+            "checksum/credentials" (include "ds.checksum.templates" (list . "secrets/redis-password.yaml" "secrets/redis-sentinel-password.yaml"))
+            "checksum/jwt" (include "ds.checksum.jwtInput" .)
+            "checksum/secure-link" (include "ds.checksum.secureLinkInput" .)
+        )) | trim | nindent 8 }}
         {{- range $key, $value := .Values.adminpanel.podAnnotations }}
         {{ $key }}: {{ tpl $value $ }}
         {{- end }}
-      {{- end }}
     spec:
       serviceAccountName: {{ include "ds.serviceAccountName" . }}
       {{- if .Values.podSecurityContext.enabled }}
@@ -94,6 +101,13 @@ spec:
         args:
         - adminpanel
         env:
+        {{- if .Values.connections.amqpUserExistingSecret }}
+        - name: AMQP_USER
+          valueFrom:
+            secretKeyRef:
+              name: {{ tpl .Values.connections.amqpUserExistingSecret $ }}
+              key: {{ .Values.connections.amqpUserSecretKeyName }}
+        {{- end }}
         - name: REDIS_SERVER_PWD
           valueFrom:
             secretKeyRef:
