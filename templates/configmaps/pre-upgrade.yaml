@@ -1,4 +1,4 @@
-{{- if and (eq (include "ds.upgrade.createConfigMap" .) "true") .Values.upgrade.job.enabled }}
+{{- if and (eq (include "ds.upgrade.createConfigMap" .) "true") .Values.upgrade.job.enabled .Release.IsUpgrade }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
