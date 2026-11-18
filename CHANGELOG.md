@@ -10,6 +10,7 @@
 
 ### Changes
 
+* Pinned `images.tag` to `v9.3.8` and `appVersion` to 9.3.8. `cluster-utils` 9.3.8+ is required because it bundles `/scripts/schema`
 * The database Jobs now use the SQL scripts bundled in the `cluster-utils` image under `/scripts/schema/<dbType>/` instead of downloading them at runtime
 
 ### Fixes

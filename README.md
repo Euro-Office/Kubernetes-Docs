@@ -490,7 +490,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `customPlugins.defaultPlugins.list`                         | Defines [which plugins](./CUSTOM_RESOURCES.md#install-selected-default-plugins-only) from the default list will be installed on the server and in the `Plugins` menu. It is executed if the `customPlugins.build` is set to `true`          | `[]`                         |
 | `customPlugins.emptyPluginsDir`                             | Defines whether a directory with plugins in containers will [contain files](./CUSTOM_RESOURCES.md#completely-disable-plugins-directory), including service files. If set to `true`, an empty volume with the `emptyDir` type will be mapped  | `false`                     |
 | `customResources.versionSalt`                               | Arbitrary string included in the `DS_VERSION_HASH` input. Change it in Git after changing the content of the `persistence.customResources` PVC (see [Deploying with Argo CD / GitOps](#13-deploying-with-argo-cd--gitops)). Used only if a `*.build` parameter is `true`| `""`                        |
-| `images.tag`                                                | Global image tag for all Euro-Office Docs services and jobs                                                                                                                     | `latest`                                                                                  |
+| `images.tag`                                                | Global image tag for all Euro-Office Docs services and jobs                                                                                                                     | `v9.3.8`                                                                                  |
 | `docservice.annotations`                                    | Defines annotations that will be additionally added to Docservice Deployment. If set to, it takes priority over the `commonAnnotations`                                        | `{}`                                                                                      |
 | `docservice.podAnnotations`                                 | Map of annotations to add to the Docservice deployment pods (`checksum/*` annotations are added automatically; a key set here takes priority)                                  | `{}`                                                             |
 | `docservice.replicas`                                       | Docservice replicas quantity. If the `docservice.autoscaling.enabled` parameter is enabled, it is ignored                                                                      | `2`                                                                                       |
@@ -1242,6 +1242,8 @@ In this case, more detailed information can be found in the application logs.
 ### 11. Database schema and hook Jobs
 
 The SQL scripts used by the `pre-install` Job (`createdb.sql`) and by the optional `pre-upgrade`, `pre-rollback` and `pre-delete` Jobs (`removetbl.sql`, `createdb.sql`) are bundled in the `cluster-utils` image under `/scripts/schema/<dbType>/`. Nothing is downloaded at runtime, so the Jobs work in clusters without Internet access and the schema always matches the image version.
+
+**Requires `cluster-utils` 9.3.8+** (it bundles `/scripts/schema`).
 
 | `connections.dbType`  | Directory in the image        |
 |-----------------------|-------------------------------|

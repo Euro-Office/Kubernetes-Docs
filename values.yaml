@@ -491,8 +491,7 @@ customPlugins:
 ## Global image parameters for all Onlyoffice Docs services and jobs
 images:
   ## images.tag Global image tag for all Onlyoffice Docs services and jobs
-  ## TODO: pin to the first release of cluster-docs, cluster-utils and cluster-example that ships `/scripts/schema` (DocumentServer#484)
-  tag: latest
+  tag: v9.3.8
 
 ## Onlyoffice Docs Docservice Deployment parameters
 ## This block defines the parameters common to all the Pods of this deployment
