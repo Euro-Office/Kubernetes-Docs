@@ -59,15 +59,15 @@ data:
     if [[ "$PRIVATE_CLUSTER" != "true" ]]; then
       wget -O /scripts/{{ .Values.install.existingConfigmap.tblCreate.keyName }} \
         {{- if eq .Values.connections.dbType "postgres" }}
-        https://raw.githubusercontent.com/ONLYOFFICE/server/{{ template "ds.sqlScripts.branchName" . }}/schema/postgresql/createdb.sql
+        https://raw.githubusercontent.com/Euro-Office/server/{{ template "ds.sqlScripts.branchName" . }}/schema/postgresql/createdb.sql
         {{- else if or (eq .Values.connections.dbType "mysql") (eq .Values.connections.dbType "mariadb") }}
-        https://raw.githubusercontent.com/ONLYOFFICE/server/{{ template "ds.sqlScripts.branchName" . }}/schema/mysql/createdb.sql
+        https://raw.githubusercontent.com/Euro-Office/server/{{ template "ds.sqlScripts.branchName" . }}/schema/mysql/createdb.sql
         {{- else if (eq .Values.connections.dbType "mssql") }}
-        https://raw.githubusercontent.com/ONLYOFFICE/server/{{ template "ds.sqlScripts.branchName" . }}/schema/mssql/createdb.sql
+        https://raw.githubusercontent.com/Euro-Office/server/{{ template "ds.sqlScripts.branchName" . }}/schema/mssql/createdb.sql
         {{- else if (eq .Values.connections.dbType "oracle") }}
-        https://raw.githubusercontent.com/ONLYOFFICE/server/{{ template "ds.sqlScripts.branchName" . }}/schema/oracle/createdb.sql
+        https://raw.githubusercontent.com/Euro-Office/server/{{ template "ds.sqlScripts.branchName" . }}/schema/oracle/createdb.sql
         {{- else if (eq .Values.connections.dbType "dameng") }}
-        https://raw.githubusercontent.com/ONLYOFFICE/server/{{ template "ds.sqlScripts.branchName" . }}/schema/dameng/createdb.sql
+        https://raw.githubusercontent.com/Euro-Office/server/{{ template "ds.sqlScripts.branchName" . }}/schema/dameng/createdb.sql
         {{- end }}
     fi
     {{- if eq .Values.connections.dbType "postgres" }}

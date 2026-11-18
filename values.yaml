@@ -4,6 +4,7 @@
 ## This is a service variable. You don't need to change it
 product:
   name: euro-office
+  companyName: euro-office
 
 ## Onlyoffice Docs common parameters
 ## This block defines common parameters for all resources
