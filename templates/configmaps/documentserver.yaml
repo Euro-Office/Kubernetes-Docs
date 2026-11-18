@@ -35,7 +35,9 @@ data:
   AMQP_PORT: {{ .Values.connections.amqpPort | quote }}
   AMQP_VHOST: {{ .Values.connections.amqpVhost | quote }}
   AMQP_HOST: {{ .Values.connections.amqpHost }}
+  {{- if not .Values.connections.amqpUserExistingSecret }}
   AMQP_USER: {{ .Values.connections.amqpUser }}
+  {{- end }}
   AMQP_PROTO: {{ .Values.connections.amqpProto }}
   METRICS_ENABLED: {{ .Values.metrics.enabled | quote }}
   {{- if .Values.metrics.enabled }}
@@ -76,5 +78,5 @@ data:
   {{- end }}
   STORAGE_SUBDIRECTORY_NAME: {{ default .Values.images.tag .Values.docservice.image.tag }}
   {{- if or .Values.customFonts.build .Values.customDictionaries.build .Values.customPlugins.build }}
-  DS_VERSION_HASH: {{ printf "%s" (now | date "2006.01.02-1504") | sha256sum | trunc 32 }}
+  DS_VERSION_HASH: {{ dict "imageTag" (default .Values.images.tag .Values.docservice.image.tag) "customFonts" .Values.customFonts "customDictionaries" .Values.customDictionaries "customPlugins" .Values.customPlugins "versionSalt" .Values.customResources.versionSalt | toJson | sha256sum | trunc 32 }}
   {{- end }}

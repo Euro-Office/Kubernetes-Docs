@@ -17,6 +17,9 @@ metadata:
 data:
   stop.sh: |-
     #!/bin/bash
+    {{- if .Values.rollback.job.skipWhenUnchanged }}
+    {{- include "ds.versionGate.script" . | nindent 4 }}
+    {{- end }}
     curl -v http://{{ include "ds.resources.name" (list . .Values.commonNameSuffix "docservice") }}:8000/internal/cluster/inactive -X PUT -s
     {{- if eq .Values.connections.dbType "postgres" }}
     PGPASSWORD=$DB_PWD psql --host={{ .Values.connections.dbHost }} \

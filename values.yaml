@@ -110,6 +110,14 @@ connections:
   amqpVhost: "/"
   ## connections.amqpUser The username for the AMQP server account
   amqpUser: user
+  ## connections.amqpUserExistingSecret The name of existing secret to use for the AMQP server username
+  ## If set to, `connections.amqpUser` is ignored and `AMQP_USER` is taken from this secret instead of the `documentserver` ConfigMap
+  ## Must contain the key specified in `connections.amqpUserSecretKeyName`
+  ## Do not also set `AMQP_USER` via `docservice.extraEnvVars` / `converter.extraEnvVars` / `adminpanel.extraEnvVars` when this option is used
+  ## (duplicate env names; server-side apply in Argo CD can reject duplicate list keys)
+  amqpUserExistingSecret: ""
+  ## connections.amqpUserSecretKeyName The name of the key that contains the AMQP server username
+  amqpUserSecretKeyName: rabbitmq-user
   ## connections.amqpProto The protocol for the connection to AMQP server
   amqpProto: amqp
   ## connections.amqpExistingSecret The name of existing secret to use for AMQP server passwords
@@ -501,11 +509,15 @@ docservice:
   ## You can also use `tpl` as the value for the key
   annotations: {}
   ## docservice.podAnnotations Map of annotations to add to the Docservice deployment pods
-  podAnnotations:
-    rollme: "{{ randAlphaNum 5 | quote }}"
+  ## Checksum annotations (`checksum/*`) for the resources rendered by this chart are added automatically; a key set here takes priority
+  ## To restart the pods on every render, set `rollme: "{{ randAlphaNum 5 | quote }}"` (not deterministic, not recommended with Argo CD)
+  podAnnotations: {}
   ## docservice.replicas Number of Docservice replicas to deploy
   ## If the `docservice.autoscaling.enabled` parameter is enabled, it is ignored
   replicas: 2
+  ## docservice.revisionHistoryLimit The number of old ReplicaSets to retain to allow rollback
+  ## If not set (`null`), the Kubernetes default is used (10). `0` is a valid value
+  revisionHistoryLimit: null
   ## Update strategy used to replace old Pods by new ones. Allowed values: `RollingUpdate` or `Recreate`
   ## For Docservice deployment, it is recommended to use the `Recreate` type
   ## docservice.updateStrategy.type Docservice deployment update strategy type
@@ -956,11 +968,15 @@ converter:
   ## You can also use `tpl` as the value for the key
   annotations: {}
   ## converter.podAnnotations Map of annotations to add to the Converter deployment pods
-  podAnnotations:
-    rollme: "{{ randAlphaNum 5 | quote }}"
+  ## Checksum annotations (`checksum/*`) for the resources rendered by this chart are added automatically; a key set here takes priority
+  ## To restart the pods on every render, set `rollme: "{{ randAlphaNum 5 | quote }}"` (not deterministic, not recommended with Argo CD)
+  podAnnotations: {}
   ## converter.replicas Number of Converter replicas to deploy
   ## If the `converter.autoscaling.enabled` parameter is enabled, it is ignored
   replicas: 2
+  ## converter.revisionHistoryLimit The number of old ReplicaSets to retain to allow rollback
+  ## If not set (`null`), the Kubernetes default is used (10). `0` is a valid value
+  revisionHistoryLimit: null
   ## Update strategy used to replace old Pods by new ones. Allowed values: `RollingUpdate` or `Recreate`
   ## converter.updateStrategy.type Docservice deployment update strategy type
   updateStrategy:
@@ -1179,8 +1195,12 @@ adminpanel:
   ## You can also use `tpl` as the value for the key
   annotations: {}
   ## adminpanel.podAnnotations Map of annotations to add to the Adminpanel deployment pod
-  podAnnotations:
-    rollme: "{{ randAlphaNum 5 | quote }}"
+  ## Checksum annotations (`checksum/*`) for the resources rendered by this chart are added automatically; a key set here takes priority
+  ## To restart the pods on every render, set `rollme: "{{ randAlphaNum 5 | quote }}"` (not deterministic, not recommended with Argo CD)
+  podAnnotations: {}
+  ## adminpanel.revisionHistoryLimit The number of old ControllerRevisions to retain to allow rollback
+  ## If not set (`null`), the Kubernetes default is used (10). `0` is a valid value
+  revisionHistoryLimit: null
   ## Update strategy used to replace old Pods by new ones. Allowed values: `RollingUpdate` or `OnDelete`
   ## adminpanel.updateStrategy.type Adminpanel StatefulSet update strategy type
   updateStrategy:
@@ -1348,8 +1368,12 @@ example:
   ## You can also use `tpl` as the value for the key
   annotations: {}
   ## example.podAnnotations Map of annotations to add to the Example pod
-  podAnnotations:
-    rollme: "{{ randAlphaNum 5 | quote }}"
+  ## Checksum annotations (`checksum/*`) for the resources rendered by this chart are added automatically; a key set here takes priority
+  ## To restart the pods on every render, set `rollme: "{{ randAlphaNum 5 | quote }}"` (not deterministic, not recommended with Argo CD)
+  podAnnotations: {}
+  ## example.revisionHistoryLimit The number of old ControllerRevisions to retain to allow rollback
+  ## If not set (`null`), the Kubernetes default is used (10). `0` is a valid value
+  revisionHistoryLimit: null
   ## Update strategy used to replace old Pods by new ones. Allowed values: `RollingUpdate` or `OnDelete`
   ## example.updateStrategy.type Example StatefulSet update strategy type
   updateStrategy:
@@ -1711,6 +1735,9 @@ upgrade:
   job:
     ## upgrade.job.enabled Enable the execution of job pre-upgrade before upgrading ONLYOFFICE Docs
     enabled: true
+    ## upgrade.job.skipWhenUnchanged Skip stopping the server and resetting the database tables if the version and the database connection do not change
+    ## The job pre-upgrade skips them only if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version; otherwise it runs as before
+    skipWhenUnchanged: true
     ## upgrade.job.annotations Defines annotations that will be additionally added to pre-upgrade Job
     ## If set to, it takes priority over the `commonAnnotations`
     ## You can also use `tpl` as the value for the key
@@ -1805,6 +1832,9 @@ rollback:
   job:
     ## rollback.job.enabled Enable the execution of job pre-rollback before rolling back ONLYOFFICE Docs
     enabled: true
+    ## rollback.job.skipWhenUnchanged Skip stopping the server and resetting the database tables if the version and the database connection do not change
+    ## The job pre-rollback skips them only if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version; otherwise it runs as before
+    skipWhenUnchanged: true
     ## rollback.job.annotations Defines annotations that will be additionally added to pre-rollback Job
     ## If set to, it takes priority over the `commonAnnotations`
     ## You can also use `tpl` as the value for the key
@@ -2058,6 +2088,97 @@ clearCache:
     ## clearCache.existingConfigmap.keyName The name of the script containing instructions for clears the Cache directory
     ## Must be the same as the `key` name in `clearCache.existingConfigmap.name` if a custom script is used
     keyName: clearCache.sh
+## Job by Resume Server has post-upgrade and post-rollback hooks and executes after any resources have been upgraded or rolled back in Kubernetes
+## ref: https://helm.sh/docs/topics/charts_hooks/#the-available-hooks
+## The pre-upgrade and pre-rollback jobs switch the server off, the server keeps this state in memory until the Pod is restarted
+## He switches the server back on (DELETE /internal/cluster/inactive) and checks the result on the Pods
+resumeServer:
+  job:
+    ## resumeServer.job.enabled Enable the execution of job Resume Server after upgrading or rolling back ONLYOFFICE Docs
+    ## It is rendered only if `upgrade.job.enabled` or `rollback.job.enabled` is `true`
+    enabled: true
+    ## resumeServer.job.deadlineSeconds The total time in seconds the job tries to switch the server on and to confirm it
+    ## `deadlineSeconds` + 60 must stay below the Helm `--timeout` (300s by default); raise both together. The Job (including the image pull) is stopped by Kubernetes after `deadlineSeconds` + 60s
+    ## If the server is not reachable until the deadline, the job only prints a warning and succeeds. If it is reachable and still switched off, the job fails (the last state check decides)
+    deadlineSeconds: 210
+    ## resumeServer.job.attemptTimeoutSeconds The time in seconds to wait for the answer of one DELETE request
+    ## The server publishes the new state right after it accepts the request and answers only after it has waited for the running saves (at least 30s), the answer is not needed
+    attemptTimeoutSeconds: 10
+    ## resumeServer.job.graceSeconds The time in seconds after which the request is sent again if GET /internal/cluster/inactive still reports a switched off server
+    graceSeconds: 10
+    ## resumeServer.job.annotations Defines annotations that will be additionally added to Resume Server Job
+    ## If set to, it takes priority over the `commonAnnotations`
+    ## You can also use `tpl` as the value for the key
+    annotations: {}
+    ## resumeServer.job.podAnnotations Map of annotations to add to the Resume Server Pod
+    podAnnotations: {}
+    ## resumeServer.job.customPodAntiAffinity Prohibiting the scheduling of Resume Server Job Pod relative to other Pods containing the specified labels on the same node
+    customPodAntiAffinity: {}
+    ## Pod affinity rules for Resume Server Job Pod scheduling by nodes relative to other Pods
+    ## Pod affinity allow you to constrain which nodes Resume Server Job Pod can be scheduled on based on the labels of Pods already running on that node
+    ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity
+    podAffinity: {}
+    ## Node affinity rules for Resume Server Job Pod scheduling by nodes
+    ## Node affinity allow you to constrain which nodes Resume Server Job Pod can be scheduled on based on node labels
+    ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
+    nodeAffinity: {}
+    ## resumeServer.job.nodeSelector Node labels for Resume Server Job Pod assignment
+    ## If set to, it takes priority over the `nodeSelector`
+    nodeSelector: {}
+    ## resumeServer.job.tolerations Tolerations for Resume Server Job Pod assignment
+    ## If set to, it takes priority over the `tolerations`
+    tolerations: []
+    ## Resume Server initContainers parameters
+    ## resumeServer.job.initContainers Containers that run before Resume Server container in a Pod
+    ## ref:https://kubernetes.io/docs/concepts/workloads/pods/init-containers/
+    initContainers: []
+    image:
+      ## resumeServer.job.image.repository Job by Resume Server ONLYOFFICE Docs image repository
+      repository: ghcr.io/euro-office/cluster-utils
+      ## resumeServer.job.image.tag Job by Resume Server ONLYOFFICE Docs image tag
+      ## If set to, it takes priority over the `images.tag`
+      tag: ""
+      ## resumeServer.job.image.pullPolicy Job by Resume Server ONLYOFFICE Docs image pull policy
+      pullPolicy: IfNotPresent
+    ## Configure a Security Context for the Resume Server container
+    containerSecurityContext:
+      ## resumeServer.job.containerSecurityContext.enabled Enable security context for the Resume Server container
+      enabled: false
+      ## resumeServer.job.containerSecurityContext.runAsUser User ID for the Resume Server container
+      runAsUser: 101
+      ## resumeServer.job.containerSecurityContext.runAsGroup Group ID for the Resume Server container
+      runAsGroup: 101
+      ## resumeServer.job.containerSecurityContext.runAsNonRoot Require that the container will run with a user with UID other than 0
+      runAsNonRoot: true
+      ## resumeServer.job.containerSecurityContext.allowPrivilegeEscalation Controls whether a process can gain more privileges than its parent process
+      allowPrivilegeEscalation: false
+      ## resumeServer.job.containerSecurityContext.seccompProfile Defines the Seccomp profile for the Resume Server container
+      seccompProfile:
+        type: RuntimeDefault
+      ## resumeServer.job.containerSecurityContext.capabilities Defines the privileges granted to the process
+      capabilities:
+        drop: ["ALL"]
+    ## Job Resume Server container resource requests and limits
+    ## ref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+    ## resumeServer.job.resources.requests The requested resources for the job Resume Server container
+    ## resumeServer.job.resources.limits The resources limits for the job Resume Server container
+    resources:
+      ## Example:
+      ## requests:
+      ##   memory: "256Mi"
+      ##   cpu: "200m"
+      requests: {}
+      ## limits:
+      ##   memory: "2Gi"
+      ##   cpu: "1000m"
+      limits: {}
+  existingConfigmap:
+    ## resumeServer.existingConfigmap.name The name of the existing ConfigMap that contains the custom script that switches the ONLYOFFICE Docs server back on
+    ## If set, the default configmap will not be created
+    name: ""
+    ## resumeServer.existingConfigmap.keyName The name of the script containing instructions for switching the ONLYOFFICE Docs server back on
+    ## Must be the same as the `key` name in `resumeServer.existingConfigmap.name` if a custom script is used
+    keyName: resume.sh
 ## Job by Grafana Dashboard has post-install and post-upgrade hooks and executes after any resources are created in Kubernetes
 ## ref: https://helm.sh/docs/topics/charts_hooks/#the-available-hooks
 ## He creates Config Maps containing Grafana dashboards
@@ -2282,6 +2403,10 @@ wopiKeysDeletion:
 ## For more details, see here:
 ## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs/blob/master/CUSTOM_RESOURCES.md
 customResources:
+  ## customResources.versionSalt Arbitrary string included in the `DS_VERSION_HASH` input
+  ## The chart cannot see the content of the `persistence.customResources` PVC. After changing it, change this value in Git to get a new `DS_VERSION_HASH`
+  ## (so that browsers fetch the new assets) and to roll the Pods. Used only if a `*.build` parameter is set to `true`
+  versionSalt: ""
   job:
     ## customResources.job.annotations Defines annotations that will be additionally added to custom-resources Job
     ## If set to, it takes priority over the `commonAnnotations`
