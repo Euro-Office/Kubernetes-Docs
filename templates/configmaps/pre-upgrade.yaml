@@ -66,13 +66,7 @@ data:
       {{- end }}
       REMOVE_SQL={{ include "ds.sql.path" (list . "removetbl" .Values.upgrade.existingConfigmap.tblRemove) }}
       CREATE_SQL={{ include "ds.sql.path" (list . "createdb" .Values.upgrade.existingConfigmap.tblCreate) }}
-      for SQL_FILE in "$REMOVE_SQL" "$CREATE_SQL"; do
-        if [ ! -f "$SQL_FILE" ]; then
-          echo -e "\e[0;31m SQL script $SQL_FILE not found \e[0m"
-          exit 1
-        fi
-        echo "Using SQL script $SQL_FILE"
-      done
+      {{- include "ds.sql.check" (list "$REMOVE_SQL" "$CREATE_SQL") | nindent 6 }}
       {{- if eq .Values.connections.dbType "postgres" }}
       PGPASSWORD=$DB_PWD psql --host={{ .Values.connections.dbHost }} \
         --port={{ .Values.connections.dbPort }} \

@@ -287,6 +287,21 @@ Uses the file mounted from the existing ConfigMap if its name is set, otherwise 
 {{- end -}}
 
 {{/*
+Shell snippet that checks that the sql scripts exist in the job container and stops the job if one is missing
+Usage: include "ds.sql.check" (list "$REMOVE_SQL" "$CREATE_SQL") | nindent 4
+Takes a list of paths (shell expressions); prints "Using SQL script <path>" for each one found
+*/}}
+{{- define "ds.sql.check" -}}
+for SQL_FILE in{{ range . }} {{ . | quote }}{{ end }}; do
+  if [ ! -f "$SQL_FILE" ]; then
+    echo -e "\e[0;31m SQL script $SQL_FILE not found \e[0m"
+    exit 1
+  fi
+  echo "Using SQL script $SQL_FILE"
+done
+{{- end -}}
+
+{{/*
 Get the configmap name containing the ds upgrade script
 */}}
 {{- define "ds.upgrade.configMapName" -}}
