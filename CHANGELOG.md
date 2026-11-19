@@ -4,7 +4,7 @@
 
 ### Breaking Changes
 
-* The `pre-upgrade`, `pre-rollback` and `pre-delete` Jobs are now disabled by default (`upgrade.job.enabled`, `rollback.job.enabled`, `delete.job.enabled`). They drop the `doc_changes`, `task_result` and `doc_callbacks` tables, and with in-memory editor state the wait for open documents only counts the documents on the Pod that received the request, so the tables may be dropped while other Pods are still saving
+* The `pre-delete` Job is now disabled by default (`delete.job.enabled`). It drops the `doc_changes`, `task_result` and `doc_callbacks` tables, and with in-memory editor state the wait for open documents only counts the documents on the Pod that received the request, so the tables may be dropped while other Pods are still saving
 * Removed the `privateCluster` and `sqlScripts.branchName` parameters
 * The defaults of `*.existingConfigmap.tblCreate.name` and `*.existingConfigmap.tblRemove.name` are now empty. The ConfigMap is mounted only if the name is set
 

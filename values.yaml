@@ -1726,10 +1726,10 @@ install:
 upgrade:
   job:
     ## upgrade.job.enabled Enable the execution of job pre-upgrade before upgrading ONLYOFFICE Docs
-    ## Disabled by default: the job drops the tables `doc_changes`, `task_result` and `doc_callbacks`, see the README
-    enabled: false
-    ## upgrade.job.skipWhenUnchanged Skip stopping the server and resetting the database tables if the version and the database connection do not change
-    ## The job pre-upgrade skips them only if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version; otherwise it runs as before
+    ## The job drops and recreates the tables `doc_changes`, `task_result` and `doc_callbacks`, which is how a new schema reaches existing installs. With `skipWhenUnchanged=true` this happens only on a version or database change, see the README
+    enabled: true
+    ## upgrade.job.skipWhenUnchanged Limit the stopping of the server and the reset of the database tables to a change of the version or the database
+    ## The job pre-upgrade skips them if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version. A tag without a numeric version (latest, a digest) disables this check, so the job always runs
     skipWhenUnchanged: true
 
     ## upgrade.job.annotations Defines annotations that will be additionally added to pre-upgrade Job
@@ -1823,10 +1823,10 @@ upgrade:
 rollback:
   job:
     ## rollback.job.enabled Enable the execution of job pre-rollback before rolling back ONLYOFFICE Docs
-    ## Disabled by default: the job drops the tables `doc_changes`, `task_result` and `doc_callbacks`, see the README
-    enabled: false
-    ## rollback.job.skipWhenUnchanged Skip stopping the server and resetting the database tables if the version and the database connection do not change
-    ## The job pre-rollback skips them only if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version; otherwise it runs as before
+    ## The job drops and recreates the tables `doc_changes`, `task_result` and `doc_callbacks`, which is how a new schema reaches existing installs. With `skipWhenUnchanged=true` this happens only on a version or database change, see the README
+    enabled: true
+    ## rollback.job.skipWhenUnchanged Limit the stopping of the server and the reset of the database tables to a change of the version or the database
+    ## The job pre-rollback skips them if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version. A tag without a numeric version (latest, a digest) disables this check, so the job always runs
     skipWhenUnchanged: true
 
     ## rollback.job.annotations Defines annotations that will be additionally added to pre-rollback Job

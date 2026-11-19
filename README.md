@@ -681,8 +681,8 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `webProxy.http`                                             | Web Proxy address for `HTTP` traffic                                                                                                                                           | `http://proxy.example.com`                                                                |
 | `webProxy.https`                                            | Web Proxy address for `HTTPS` traffic                                                                                                                                          | `https://proxy.example.com`                                                               |
 | `webProxy.noProxy`                                          | Patterns for IP addresses or k8s services name or domain names that shouldn’t use the Web Proxy                                                                                | `localhost,127.0.0.1,docservice`                                                          |
-| `upgrade.job.enabled`                                       | Enable the execution of job pre-upgrade before upgrading Euro-Office Docs. Drops the tables `doc_changes`, `task_result` and `doc_callbacks`, see [notes](#11-database-schema-and-hook-jobs) | `false`                                                                                    |
-| `upgrade.job.skipWhenUnchanged`                             | Skip stopping the server and resetting the database tables in the pre-upgrade job if the version and the database connection do not change. It skips them only if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version; otherwise the job runs as before| `true`                                                                                  |
+| `upgrade.job.enabled`                                       | Enable the execution of job pre-upgrade before upgrading Euro-Office Docs. Resets the tables `doc_changes`, `task_result` and `doc_callbacks` on a version or database change, see [notes](#11-database-schema-and-hook-jobs) | `true`                                                                                     |
+| `upgrade.job.skipWhenUnchanged`                             | Limit stopping the server and resetting the database tables in the pre-upgrade job to a change of the version or the database. It skips them if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version; a tag without a numeric version (`latest`, a digest) disables the check, so the job always runs| `true`                                                                                  |
 | `upgrade.job.annotations`                                   | Defines annotations that will be additionally added to pre-upgrade Job. If set to, it takes priority over the `commonAnnotations`                                              | `{}`                                                                                      |
 | `upgrade.job.podAnnotations`                                | Map of annotations to add to the pre-upgrade Pod                                                                                                                               | `{}`                                                                                      |
 | `upgrade.job.customPodAntiAffinity`                         | Prohibiting the scheduling of pre-upgrade Job Pod relative to other Pods containing the specified labels on the same node                                                      | `{}`                                                                                      |
@@ -702,8 +702,8 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `upgrade.existingConfigmap.tblCreate.name`                  | The name of the existing ConfigMap that contains the sql file for craeting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `upgrade.existingConfigmap.tblCreate.keyName`               | The name of the sql file containing instructions for creating tables from the database. Must be the same as the `key` name in `upgrade.existingConfigmap.tblCreate.name`       | `createdb.sql`                                                                            |
 | `upgrade.existingConfigmap.dsStop`                          | The name of the existing ConfigMap that contains the Euro-Office Docs upgrade script. If set, the four previous parameters are ignored. Must contain a key `stop.sh`            | `""`                                                                                      |
-| `rollback.job.enabled`                                      | Enable the execution of job pre-rollback before rolling back Euro-Office Docs. Drops the tables `doc_changes`, `task_result` and `doc_callbacks`, see [notes](#11-database-schema-and-hook-jobs) | `false`                                                                                    |
-| `rollback.job.skipWhenUnchanged`                            | Skip stopping the server and resetting the database tables in the pre-rollback job if the version and the database connection do not change. It skips them only if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version; otherwise the job runs as before| `true`                                                                                  |
+| `rollback.job.enabled`                                      | Enable the execution of job pre-rollback before rolling back Euro-Office Docs. Resets the tables `doc_changes`, `task_result` and `doc_callbacks` on a version or database change, see [notes](#11-database-schema-and-hook-jobs) | `true`                                                                                     |
+| `rollback.job.skipWhenUnchanged`                            | Limit stopping the server and resetting the database tables in the pre-rollback job to a change of the version or the database. It skips them if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version; a tag without a numeric version (`latest`, a digest) disables the check, so the job always runs| `true`                                                                                  |
 | `rollback.job.annotations`                                  | Defines annotations that will be additionally added to pre-rollback Job. If set to, it takes priority over the `commonAnnotations`                                             | `{}`                                                                                      |
 | `rollback.job.podAnnotations`                               | Map of annotations to add to the pre-rollback Pod                                                                                                                              | `{}`                                                                                      |
 | `rollback.job.customPodAntiAffinity`                        | Prohibiting the scheduling of pre-rollback Job Pod relative to other Pods containing the specified labels on the same node                                                     | `{}`                                                                                      |
@@ -1130,7 +1130,7 @@ Or modify the values.yaml file and run the command:
 $ helm upgrade documentserver -f values.yaml euro-office/docs
 ```
 
-The hook that shuts down the Euro-Office Docs and recreates the database tables is disabled by default (`upgrade.job.enabled=false`), see the [notes](#11-database-schema-and-hook-jobs) below. When it is enabled, it runs on `helm upgrade` and, if the version of Euro-Office Docs or the database connection changes, the `resume-server` job switches the server back on afterwards. If neither changes, the job detects this and does nothing (see [Upgrade lifecycle](#131-upgrade-lifecycle)). The default hook execution time is 300s.
+The `pre-upgrade` hook (`upgrade.job.enabled=true` by default) shuts down the Euro-Office Docs and recreates the database tables, see the [notes](#11-database-schema-and-hook-jobs) below. If the version of Euro-Office Docs or the database connection changes, the `resume-server` job switches the server back on afterwards. If neither changes, the job detects this and does nothing (see [Upgrade lifecycle](#131-upgrade-lifecycle)). The default hook execution time is 300s.
 The execution time can be changed using --timeout [time], for example
 
 ```bash
@@ -1139,7 +1139,7 @@ $ helm upgrade documentserver -f values.yaml euro-office/docs --timeout 15m
 
   > **Note**: `resumeServer.job.deadlineSeconds` + 60 must stay below the `--timeout` value, see [Upgrade lifecycle](#131-upgrade-lifecycle)
 
-Note: The `pre-upgrade` Job is disabled by default and drops database tables when enabled. See the [notes](#11-database-schema-and-hook-jobs) below.
+Note: The `pre-upgrade` Job resets the database tables when the version or the database changes. See the [notes](#11-database-schema-and-hook-jobs) below.
 
 If you want to update any parameter other than the version of the Euro-Office Docs, then run the `helm upgrade` command without `hooks`, for example:
 
@@ -1153,7 +1153,7 @@ To rollback updates, run the following command:
 $ helm rollback documentserver
 ```
 
-Note: The `pre-rollback` Job is disabled by default and drops database tables when enabled. See the [notes](#11-database-schema-and-hook-jobs) below.
+Note: The `pre-rollback` Job resets the database tables when the version or the database changes. See the [notes](#11-database-schema-and-hook-jobs) below.
 
 ### 8. Shutdown Euro-Office Docs (optional)
 
@@ -1278,18 +1278,22 @@ $ helm install documentserver euro-office/docs \
 
 The same applies to `upgrade.existingConfigmap.*`, `rollback.existingConfigmap.*` (`tblRemove` and `tblCreate`) and `delete.existingConfigmap.tblRemove`. The file is mounted at `/scripts/<keyName>`.
 
-#### Jobs that drop tables (disabled by default)
+#### Jobs that drop tables
 
-`upgrade.job.enabled`, `rollback.job.enabled` and `delete.job.enabled` are `false` by default. When enabled, the corresponding hook asks the Docservice to stop accepting new connections (`/internal/cluster/inactive`), waits for open documents to be saved and then runs `removetbl.sql`, which **drops the tables `doc_changes`, `task_result` and `doc_callbacks`** (the `upgrade` and `rollback` Jobs then recreate them with `createdb.sql`).
+The `upgrade.job.enabled` and `rollback.job.enabled` parameters are `true` by default, `delete.job.enabled` is `false`. When a hook runs, it asks the Docservice to stop accepting new connections (`/internal/cluster/inactive`), waits for open documents to be saved and then runs `removetbl.sql`, which **drops the tables `doc_changes`, `task_result` and `doc_callbacks`** (the `upgrade` and `rollback` Jobs then recreate them with `createdb.sql`).
 
-They are off by default because the editor state is kept in the memory of each Docservice Pod. The `inactive` request is sent to all Docservice Pods, but the wait only counts the open documents on the Pod that received it. With more than one Docservice replica, the tables may therefore be dropped while other Pods are still saving.
+* **Upgrade and rollback** reset the tables only on a version change (or a change of the database connection). With `upgrade.job.skipWhenUnchanged=true` (and `rollback.job.skipWhenUnchanged=true`), a `helm upgrade` that keeps the same image tags and database does not stop the server and does not touch the tables, see the [version gate](#131-upgrade-lifecycle). This reset is how a new schema reaches existing installs, because `pre-install` runs only on a fresh install.
+* **Tags without a numeric version** (`latest`, a digest) disable the gate: the Jobs cannot tell whether the version changed, so they reset the tables on every `helm upgrade` and `helm rollback`. Use a versioned tag.
+* **Delete** is off by default: `helm uninstall` keeps the tables unless you set `delete.job.enabled=true`.
+
+The editor state is kept in the memory of each Docservice Pod. The `inactive` request is sent to all Docservice Pods, but the wait only counts the open documents on the Pod that received it. With more than one Docservice replica, run version upgrades (and rollbacks) in a quiet window with no active editing sessions: otherwise the tables may be dropped while other Pods are still saving. The same applies to `delete.job.enabled=true`.
 
 The `PUT /internal/cluster/inactive` call takes at least 30 seconds, even with no open editors: after sending the shutdown to all Docservice Pods, the server waits a fixed 30 seconds for delivery before it checks for open documents. It returns `false` if documents are still being saved after 30 seconds plus the conversion timeout; the `pre-upgrade` Job then stops, while `pre-rollback` and `pre-delete` continue. Allow for this delay in the `--timeout` of `helm upgrade`, `helm rollback` and `helm uninstall` (default 300s). The Jobs use `backoffLimit: 2`, so a failed attempt is retried and repeats the call.
 
-Enable these Jobs only if you understand and accept this, for example with a single Docservice replica and no active editing sessions:
+To drop the tables on `helm uninstall`, set `delete.job.enabled=true` with `helm install` or `helm upgrade` (the uninstall uses the values stored in the release). To switch the upgrade Job off, for example:
 
 ```bash
-$ helm upgrade documentserver euro-office/docs --set upgrade.job.enabled=true
+$ helm upgrade documentserver euro-office/docs --set upgrade.job.enabled=false
 ```
 
 #### WOPI keys are deleted on `helm uninstall`
@@ -1300,7 +1304,7 @@ $ helm upgrade documentserver euro-office/docs --set upgrade.job.enabled=true
 
 * `privateCluster` and `sqlScripts.branchName` are removed. Remove them from your values files. The Jobs no longer download anything, and the `ConfigMap`s with SQL scripts created for `privateCluster=true` are no longer required. If you still want to use them, set the `existingConfigmap.*.name` parameters explicitly.
 * The defaults of `*.existingConfigmap.tblCreate.name` and `*.existingConfigmap.tblRemove.name` changed from `init-db-scripts`/`remove-db-scripts` to `""`. Set the name explicitly if you rely on those ConfigMaps.
-* `upgrade.job.enabled`, `rollback.job.enabled` and `delete.job.enabled` now default to `false`. If you relied on the tables being recreated on `helm upgrade`, set them to `true` explicitly. Note that `helm delete` no longer drops the database tables by default.
+* `delete.job.enabled` now defaults to `false`, so `helm delete` no longer drops the database tables by default. Set it to `true` if you rely on that. `upgrade.job.enabled` and `rollback.job.enabled` keep their default `true`.
 * `webProxy` is still available for the Jobs that need Internet access to other resources.
 * The `cluster-utils` image tag must be a release that contains `/scripts/schema`. Older images do not, and the Jobs fail.
 
