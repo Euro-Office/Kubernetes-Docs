@@ -1,5 +1,24 @@
 # Change log
 
+## 7.0.0
+
+### Breaking Changes
+
+* The `pre-delete` Job is now disabled by default (`delete.job.enabled`). It drops the `doc_changes`, `task_result` and `doc_callbacks` tables, and with in-memory editor state the wait for open documents only counts the documents on the Pod that received the request, so the tables may be dropped while other Pods are still saving
+* Removed the `privateCluster` and `sqlScripts.branchName` parameters
+* The defaults of `*.existingConfigmap.tblCreate.name` and `*.existingConfigmap.tblRemove.name` are now empty. The ConfigMap is mounted only if the name is set
+
+### Changes
+
+* Pinned `images.tag` to `v9.3.8` and `appVersion` to 9.3.8. `cluster-utils` 9.3.8+ is required because it bundles `/scripts/schema`
+* The database Jobs now use the SQL scripts bundled in the `cluster-utils` image under `/scripts/schema/<dbType>/` instead of downloading them at runtime
+
+### Fixes
+
+* Fixed the `pre-install` Job silently creating no tables when the SQL script could not be downloaded. A missing script now fails the Job
+* Fixed the `pre-rollback` ConfigMap staying in the namespace after a successful rollback, which blocked the next rollback
+* Fixed the `pre-upgrade` and `pre-rollback` Jobs running `createdb.sql` and reporting success after `removetbl.sql` failed
+
 ## 6.1.0
 
 ### New Features
