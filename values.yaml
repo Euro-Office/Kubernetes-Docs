@@ -131,7 +131,6 @@ connections:
   amqpPassword: ""
 ## Web Proxy parameters
 ## Used if your network has a web proxy
-## ref: https://github.com/ONLYOFFICE/Kubernetes-Docs#11-database-schema-and-hook-jobs
 webProxy:
   ## webProxy.enabled Specify whether a Web proxy is used in your network to access the Pods of k8s cluster to the Internet
   enabled: false
