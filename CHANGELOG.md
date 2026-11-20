@@ -1,5 +1,30 @@
 # Change log
 
+## 8.0.0
+
+### Breaking Changes
+
+* Removed the `connections.redisConnectorName` parameter (the `ioredis` switch for Redis Sentinel). Sentinel mode is now enabled when `connections.redisSentinelNodes` is not empty, and Redis Cluster mode when `connections.redisClusterNodes` is not empty. Remove `redisConnectorName` from your values files
+* `REDIS_SENTINEL_PWD` is now rendered only if `connections.redisSentinelNodes` is set and `connections.redisSentinelNoPass` is `false` (the default is `true`), and `REDIS_SERVER_PWD` is no longer rendered if `connections.redisNoPass` is `true`. Users who set `redisConnectorName: ioredis` with an authenticated Sentinel must set `connections.redisSentinelNodes`, `connections.redisSentinelGroupName` and `connections.redisSentinelNoPass: false`
+
+### New Features
+
+* Added configurable editor storage: `docservice.editorDataStorage` (`memory`, `standalone`, `sentinel` or `cluster`, default `memory`) and `docservice.editorStatStorage` (defaults to the value of `editorDataStorage`). The chart fails to render for unsupported modes and for conflicting Redis topologies
+* Added Redis and Sentinel TLS support (`connections.redisTLS`, `connections.redisSentinelTLS`) and a shared private CA bundle (`connections.redisCAExistingSecret`, `connections.redisCASecretKeyName`) mounted into the Docservice, Converter, Adminpanel and test Pods. Requires a DocumentServer image with the Redis TLS changes
+* Added password-only and named ACL user authentication for Redis and Sentinel (`connections.redisUser: ""` omits the username, new `connections.redisSentinelUser`)
+* Added `tests.extraEnvVars`, `tests.extraVolumes` and `tests.extraVolumeMounts` for the test Pod
+* Added example values files `demo/my-values.redis-standalone.yml`, `demo/my-values.redis-data-only.yml`, `demo/my-values.redis-sentinel.yml` and `demo/my-values.redis-cluster.yml`, and a test of the generated Redis configuration (`test_redis_config.sh`, run by `helm test` for Sentinel and Cluster)
+
+### Changes
+
+* The Redis password environment variables are now rendered by shared helpers in all workloads and in the test Pod
+* The test Pod selects the Redis mode from `REDIS_SENTINEL_NODES` and `REDIS_CLUSTER_NODES` instead of `REDIS_CONNECTOR_NAME`
+* README: documented the Redis storage topologies, TLS and authentication secrets; fixed the parameter name `connections.redistHost` to `connections.redisHost`
+
+### Fixes
+
+* Fixed `helm test` reporting success when a check other than `CheckDS` failed
+
 ## 7.0.0
 
 ### Breaking Changes
