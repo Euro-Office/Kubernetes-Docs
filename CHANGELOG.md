@@ -4,11 +4,13 @@
 
 ### Breaking Changes
 
+* Release requirement: chart 8.0.0 must be released together with the first DocumentServer release containing Redis editor storage support; set `appVersion`, `images.tag` and `ds.redis.minImageVersion` to that version
 * Removed the `connections.redisConnectorName` parameter (the `ioredis` switch for Redis Sentinel). Sentinel mode is now enabled when `connections.redisSentinelNodes` is not empty, and Redis Cluster mode when `connections.redisClusterNodes` is not empty. Remove `redisConnectorName` from your values files
 * `REDIS_SENTINEL_PWD` is now rendered only if `connections.redisSentinelNodes` is set and `connections.redisSentinelNoPass` is `false` (the default is `true`), and `REDIS_SERVER_PWD` is no longer rendered if `connections.redisNoPass` is `true`. Users who set `redisConnectorName: ioredis` with an authenticated Sentinel must set `connections.redisSentinelNodes`, `connections.redisSentinelGroupName` and `connections.redisSentinelNoPass: false`
 
 ### New Features
 
+* Added a DocumentServer version gate for Redis editor storage and Redis TLS (`ds.redis.minImageVersion` in `templates/_helpers.tpl`). It rejects known older numeric `docservice` image tags and is inactive until the minimum DocumentServer version is set
 * Added configurable editor storage: `docservice.editorDataStorage` (`memory`, `standalone`, `sentinel` or `cluster`, default `memory`) and `docservice.editorStatStorage` (defaults to the value of `editorDataStorage`). The chart fails to render for unsupported modes and for conflicting Redis topologies
 * Added Redis and Sentinel TLS support (`connections.redisTLS`, `connections.redisSentinelTLS`) and a shared private CA bundle (`connections.redisCAExistingSecret`, `connections.redisCASecretKeyName`) mounted into the Docservice, Converter, Adminpanel and test Pods. Requires a DocumentServer image with the Redis TLS changes
 * Added password-only and named ACL user authentication for Redis and Sentinel (`connections.redisUser: ""` omits the username, new `connections.redisSentinelUser`)

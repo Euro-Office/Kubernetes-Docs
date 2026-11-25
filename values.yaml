@@ -39,7 +39,7 @@ connections:
   ## Used with connections.redisHost for the standalone/startup fallback endpoint.
   redisPort: "6379"
   ## connections.redisTLS Enable TLS for standalone Redis, Cluster, and Sentinel-discovered Redis nodes
-  ## Requires a DocumentServer image supporting REDIS_SERVER_TLS. Ports remain unchanged.
+  ## Requires a DocumentServer image with Redis editor storage support (Euro-Office/DocumentServer PR #386); see 'Redis editor storage image requirement'. Ports remain unchanged.
   redisTLS: false
   ## connections.redisCAExistingSecret Existing Secret containing a PEM CA bundle for Redis and Sentinel TLS.
   ## Shared by Docservice, Converter, Adminpanel and the dependency connectivity test; no manual mounts are needed.
@@ -95,7 +95,7 @@ connections:
   ## Redis Sentinel is enabled when `connections.redisSentinelNodes` is not empty
   redisSentinelGroupName: mymaster
   ## connections.redisSentinelTLS Enable TLS for Sentinel discovery independently of connections.redisTLS
-  ## Requires a DocumentServer image supporting REDIS_SENTINEL_TLS. Ports remain unchanged.
+  ## Requires a DocumentServer image with Redis editor storage support (Euro-Office/DocumentServer PR #386); see 'Redis editor storage image requirement'. Ports remain unchanged.
   redisSentinelTLS: false
   ## connections.redisSentinelUser The Redis Sentinel user name
   ## Defaults to "" for password-only authentication (no protocol username, authenticates as default).

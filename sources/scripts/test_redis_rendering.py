@@ -7,6 +7,8 @@
 import itertools
 import json
 from pathlib import Path
+import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -18,12 +20,12 @@ CHART = Path(__file__).resolve().parents[2]
 AUTH_MODES = {"none": "ignored-user", "password": "", "acl": "app-user"}
 
 
-def render(values):
+def render(values, chart=CHART):
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as overrides:
         json.dump(values, overrides)
         overrides.flush()
         return subprocess.run(
-            ["helm", "template", "redis-auth-test", str(CHART), "-f", overrides.name],
+            ["helm", "template", "redis-auth-test", str(chart), "-f", overrides.name],
             text=True, capture_output=True, check=False,
         )
 
@@ -263,6 +265,82 @@ class RedisAuthenticationRendering(unittest.TestCase):
                     self.assertEqual([e for e in container["env"] if e["name"] == override["name"]], [override])
                     volume = next(v for v in spec["volumes"] if v["name"] == "redis-ca-certificates")
                     self.assertEqual(volume["secret"]["items"], [{"key": "trust.pem", "path": "ca.crt"}])
+
+
+class RedisImageVersionGate(unittest.TestCase):
+    """The gate is inactive in the repository; a copy with a fake minimum version exercises it."""
+
+    MINIMUM = "99.0.0"
+    STORAGE = {
+        "standalone": {"docservice": {"editorDataStorage": "standalone"}},
+        "sentinel": {"docservice": {"editorDataStorage": "sentinel"},
+                     "connections": {"redisSentinelNodes": ["sentinel:26379"]}},
+        "cluster": {"docservice": {"editorDataStorage": "cluster"},
+                    "connections": {"redisClusterNodes": ["redis:6379"]}},
+    }
+
+    @classmethod
+    def setUpClass(cls):
+        cls.temp = tempfile.TemporaryDirectory()
+        cls.chart = Path(cls.temp.name) / "chart"
+        shutil.copytree(CHART, cls.chart, ignore=shutil.ignore_patterns(".git"))
+        helpers = cls.chart / "templates" / "_helpers.tpl"
+        text, count = re.subn(
+            r'\{\{-\s*define "ds\.redis\.minImageVersion"\s*-\}\}\s*\{\{-\s*end\s*-\}\}',
+            '{{- define "ds.redis.minImageVersion" -}}' + cls.MINIMUM + '{{- end -}}',
+            helpers.read_text(),
+        )
+        assert count == 1, "the minimum version helper was not found"
+        helpers.write_text(text)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temp.cleanup()
+
+    def result(self, values, tag, chart=None, docservice_tag=None):
+        values = json.loads(json.dumps(values))
+        values.setdefault("images", {})["tag"] = tag
+        if docservice_tag:
+            values.setdefault("docservice", {}).setdefault("image", {})["tag"] = docservice_tag
+        return render(values, chart or self.chart)
+
+    def assertRejected(self, values, tag, **kwargs):
+        result = self.result(values, tag, **kwargs)
+        self.assertNotEqual(result.returncode, 0, result.stdout[:200])
+        self.assertIn("require DocumentServer %s or later" % self.MINIMUM, result.stderr)
+
+    def assertRenders(self, values, tag, **kwargs):
+        result = self.result(values, tag, **kwargs)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_inactive_without_minimum_version(self):
+        self.assertRenders(self.STORAGE["standalone"], "v9.3.8", chart=CHART)
+        self.assertRenders({"connections": {"redisTLS": True}}, "v9.3.8", chart=CHART)
+        self.assertRenders({"connections": {"redisSentinelTLS": True}}, "v9.3.8", chart=CHART)
+
+    def test_old_tag_rejected_when_redis_wanted(self):
+        for name, values in self.STORAGE.items():
+            with self.subTest(storage=name):
+                self.assertRejected(values, "v9.3.8")
+        self.assertRejected({"connections": {"redisTLS": True}}, "v9.3.8")
+        self.assertRejected({"connections": {"redisSentinelTLS": True}}, "v9.3.8")
+
+    def test_old_tag_allowed_with_memory(self):
+        self.assertRenders({}, "v9.3.8")
+
+    def test_new_and_prerelease_tags(self):
+        for tag in ("v99.0.0", "99.0.0-rc.1", "v99.1.0", "100.0.0"):
+            with self.subTest(tag=tag):
+                self.assertRenders(self.STORAGE["standalone"], tag)
+
+    def test_non_numeric_tags_not_checked(self):
+        for tag in ("latest", "nightly", "dev-redis-abc123"):
+            with self.subTest(tag=tag):
+                self.assertRenders(self.STORAGE["standalone"], tag)
+
+    def test_docservice_tag_wins(self):
+        self.assertRejected(self.STORAGE["standalone"], "v99.0.0", docservice_tag="v9.3.8")
+        self.assertRenders(self.STORAGE["standalone"], "v9.3.8", docservice_tag="v99.0.0")
 
 
 if __name__ == "__main__":

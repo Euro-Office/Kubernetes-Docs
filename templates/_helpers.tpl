@@ -12,6 +12,14 @@ Check the DB type
 {{- end -}}
 
 {{/*
+Minimum DocumentServer version that supports Redis editor storage and the Redis TLS settings
+(Euro-Office/DocumentServer PR #386). Empty until that DocumentServer release is tagged; while empty the
+version gate in ds.editor.storage.validate is inactive. Set it to the released version (e.g. "X.Y.Z") when
+chart and image are released together.
+*/}}
+{{- define "ds.redis.minImageVersion" -}}{{- end -}}
+
+{{/*
 Validate editor storage modes and their Redis topology requirements.
 */}}
 {{- define "ds.editor.storage.validate" -}}
@@ -54,6 +62,12 @@ Validate editor storage modes and their Redis topology requirements.
 {{- end -}}
 {{- if and (not .Values.connections.redisNoPass) (empty .Values.connections.redisPassword) (empty .Values.connections.redisExistingSecret) -}}
   {{- fail "Authenticated Redis requires connections.redisPassword or connections.redisExistingSecret." -}}
+{{- end -}}
+{{- $redisWanted := or (ne $redisStorage "memory") .Values.connections.redisTLS .Values.connections.redisSentinelTLS -}}
+{{- $minVersion := include "ds.redis.minImageVersion" . | trim -}}
+{{- $imageVersion := include "ds.versionGate.version" . -}}
+{{- if and $redisWanted $minVersion $imageVersion (semverCompare (printf "<%s-0" $minVersion) $imageVersion) -}}
+  {{- fail (printf "Redis editor storage and Redis TLS require DocumentServer %s or later, but the docservice image tag is %s. Use a newer image or set docservice.editorDataStorage/editorStatStorage to memory and disable connections.redisTLS/redisSentinelTLS." $minVersion (default .Values.images.tag .Values.docservice.image.tag)) -}}
 {{- end -}}
 true
 {{- end -}}

@@ -440,6 +440,31 @@ Redis topology required by the selected mode: `redisHost` and `redisPort` for
 standalone, `redisClusterNodes` for cluster, or `redisSentinelNodes` for
 Sentinel. Cluster and Sentinel cannot be configured together.
 
+#### Redis editor storage image requirement
+
+Redis editor storage needs a DocumentServer image with Redis editor storage
+support (Euro-Office/DocumentServer PR #386). The following settings depend on
+it:
+
+* `docservice.editorDataStorage` or `docservice.editorStatStorage` other than `memory`
+* `connections.redisTLS`
+* `connections.redisSentinelTLS`
+
+Older images ignore these settings silently: DocService starts without an
+error and keeps the editor data in memory. Once the minimum DocumentServer
+version is set in the chart at release, the chart rejects known older numeric
+`docservice` image tags (for example `v9.3.8`) when any of these settings is
+used. Non-numeric tags (`latest`, `nightly`, `dev-<sha>`) are not checked.
+
+To verify a running image (`0` means unsupported):
+
+```bash
+kubectl -n <NS> exec deploy/docservice -c docservice -- \
+  grep -c -E 'EDITOR_DATA_STORAGE|ENTRYPOINT_CONFIG_ONLY_OUTPUT' /usr/local/bin/docker-entrypoint.sh
+```
+
+`helm test` (`test-redis-config`) also fails fast on unsupported images.
+
 #### Redis TLS
 
 `connections.redisTLS` enables TLS for standalone Redis, Cluster connections,
@@ -576,7 +601,7 @@ can still remain authenticated.
 | `connections.dbExistingSecret`                              | Name of existing secret to use for Database passwords. Must contain the key specified in `connections.dbSecretKeyName`                                                         | `postgresql`                                                                              |
 | `connections.redisHost`                                     | Redis host, or the reachable startup/readiness fallback endpoint when a topology is configured                                                                                 | `redis-master`                                                                            |
 | `connections.redisPort`                                     | Redis port used with `connections.redisHost` for the standalone/startup fallback endpoint                                                                                       | `6379`                                                                                    |
-| `connections.redisTLS`                                     | Enable TLS for standalone Redis, Cluster, and Sentinel-discovered Redis nodes. Requires a DocumentServer image with TLS entrypoint support.                                | `false`                                                                                   |
+| `connections.redisTLS`                                     | Enable TLS for standalone Redis, Cluster, and Sentinel-discovered Redis nodes. Requires an image with Redis editor storage support, see [Redis editor storage image requirement](#redis-editor-storage-image-requirement).                                | `false`                                                                                   |
 | `connections.redisCAExistingSecret`                        | Existing Secret containing a PEM CA bundle, shared by application containers and the connectivity test when Redis or Sentinel TLS is enabled                                 | `""`                                                                                      |
 | `connections.redisCASecretKeyName`                         | Key containing the PEM CA bundle in `connections.redisCAExistingSecret`                                                                                                       | `ca.crt`                                                                                  |
 | `connections.redisUser`                                     | Redis [user](https://redis.io/docs/management/security/acl/) name. Set to `""` for password-only authentication as `default`. Omitted when empty or `connections.redisNoPass` is `true` | `default`                                                                                |
@@ -588,7 +613,7 @@ can still remain authenticated.
 | `connections.redisNoPass`                                   | If `true`, omit Redis-node credentials independently of Sentinel authentication. If `false`, a node password or existing password Secret is required; the username is optional. | `false`                                                                                   |
 | `connections.redisSentinelNodes`                            | List of Redis Sentinel Nodes. Sentinel mode is enabled when this list is non-empty. There is no need to specify every node, 3 should be enough. It must use the `host:port` format | `[]`                             |
 | `connections.redisSentinelGroupName`                        | Name of the Sentinel-monitored Redis group.                                                                                                                                    | `mymaster`                                                                                |
-| `connections.redisSentinelTLS`                             | Enable TLS for Sentinel discovery independently of `connections.redisTLS`. Requires a DocumentServer image with TLS entrypoint support.                                    | `false`                                                                                   |
+| `connections.redisSentinelTLS`                             | Enable TLS for Sentinel discovery independently of `connections.redisTLS`. Requires an image with Redis editor storage support, see [Redis editor storage image requirement](#redis-editor-storage-image-requirement).                                    | `false`                                                                                   |
 | `connections.redisSentinelUser`                             | Optional Redis Sentinel ACL user name. Empty omits the protocol username for password-only authentication as `default`. Omitted when `connections.redisSentinelNoPass` is `true`. | `""`                                                                                     |
 | `connections.redisSentinelExistingSecret`                   | Name of existing secret to use for Redis Sentinel password. Must contain the key specified in `connections.redisSentinelSecretKeyName`. The password overrides `optionsSentinel` in `local.json` | `""`              |
 | `connections.redisSentinelSecretKeyName`                    | The name of the key that contains the Redis Sentinel user password. If you set a password in `redisSentinelPassword`, a secret will be automatically created, the key name of which will be the value set here | `sentinel-password`                                       |
@@ -666,8 +691,8 @@ can still remain authenticated.
 | `customPlugins.emptyPluginsDir`                             | Defines whether a directory with plugins in containers will [contain files](./CUSTOM_RESOURCES.md#completely-disable-plugins-directory), including service files. If set to `true`, an empty volume with the `emptyDir` type will be mapped  | `false`                     |
 | `customResources.versionSalt`                               | Arbitrary string included in the `DS_VERSION_HASH` input. Change it in Git after changing the content of the `persistence.customResources` PVC (see [Deploying with Argo CD / GitOps](#13-deploying-with-argo-cd--gitops)). Used only if a `*.build` parameter is `true`| `""`                        |
 | `images.tag`                                                | Global image tag for all Euro-Office Docs services and jobs                                                                                                                     | `v9.3.8`                                                                                  |
-| `docservice.editorDataStorage`                              | Editor data storage mode. Can differ from `docservice.editorStatStorage`; possible values are `memory`, `standalone`, `sentinel` or `cluster`. Redis-backed modes use the shared `editorDataRedis` connection. | `memory` |
-| `docservice.editorStatStorage`                              | Editor statistics storage mode. If omitted, it follows `docservice.editorDataStorage`; Redis-backed modes must use the same topology as editor data. | `editorDataStorage` |
+| `docservice.editorDataStorage`                              | Editor data storage mode. Can differ from `docservice.editorStatStorage`; possible values are `memory`, `standalone`, `sentinel` or `cluster`. Redis-backed modes use the shared `editorDataRedis` connection and require an image with Redis editor storage support, see [Redis editor storage image requirement](#redis-editor-storage-image-requirement). | `memory` |
+| `docservice.editorStatStorage`                              | Editor statistics storage mode. If omitted, it follows `docservice.editorDataStorage`; Redis-backed modes must use the same topology as editor data and require an image with Redis editor storage support, see [Redis editor storage image requirement](#redis-editor-storage-image-requirement). | `editorDataStorage` |
 | `docservice.annotations`                                    | Defines annotations that will be additionally added to Docservice Deployment. If set to, it takes priority over the `commonAnnotations`                                        | `{}`                                                                                      |
 | `docservice.podAnnotations`                                 | Map of annotations to add to the Docservice deployment pods (`checksum/*` annotations are added automatically; a key set here takes priority)                                  | `{}`                                                             |
 | `docservice.replicas`                                       | Docservice replicas quantity. If the `docservice.autoscaling.enabled` parameter is enabled, it is ignored                                                                      | `2`                                                                                       |
