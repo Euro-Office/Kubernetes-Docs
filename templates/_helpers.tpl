@@ -82,6 +82,18 @@ Validate editor storage modes and their Redis topology requirements.
 {{- if and (eq (include "ds.redis.enabled" .) "true") (not .Values.connections.redisNoPass) (empty .Values.connections.redisPassword) (empty .Values.connections.redisExistingSecret) -}}
   {{- fail "Authenticated Redis requires connections.redisPassword or connections.redisExistingSecret." -}}
 {{- end -}}
+{{- if eq (include "ds.redis.enabled" .) "true" -}}
+  {{- $dbNum := toString (default "0" .Values.connections.redisDBNum) -}}
+  {{- if not (regexMatch "^[0-9]+$" $dbNum) -}}
+    {{- fail (printf "connections.redisDBNum must be a non-negative integer, got %q." $dbNum) -}}
+  {{- end -}}
+  {{- if and (eq $redisStorage "cluster") (ne (trimAll "0" $dbNum) "") -}}
+    {{- fail (printf "Redis Cluster supports only database 0; connections.redisDBNum is %q. Use a dedicated Cluster or a different key prefix to separate environments." $dbNum) -}}
+  {{- end -}}
+  {{- if and .Values.connections.redisCAExistingSecret (not (or .Values.connections.redisTLS .Values.connections.redisSentinelTLS)) -}}
+    {{- fail "connections.redisCAExistingSecret is set but connections.redisTLS and connections.redisSentinelTLS are both false: the CA would be ignored and Redis connections would not use TLS. Enable TLS or remove the CA secret." -}}
+  {{- end -}}
+{{- end -}}
 {{- $legacyConnector := toString (default "" .Values.connections.redisConnectorName) -}}
 {{- if and $legacyConnector (ne $legacyConnector "redis") -}}
   {{- fail (printf "connections.redisConnectorName (%q) was removed in chart 8.0.0. For Redis Sentinel set docservice.editorDataStorage: sentinel and connections.redisSentinelNodes (and redisSentinelGroupName); see the 8.0.0 CHANGELOG. Remove redisConnectorName from your values." $legacyConnector) -}}

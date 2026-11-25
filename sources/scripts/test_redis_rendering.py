@@ -212,11 +212,16 @@ class RedisAuthenticationRendering(unittest.TestCase):
                     connections["redisSentinelNodes"] = ["sentinel:26379"]
                 elif topology == "cluster":
                     connections["redisClusterNodes"] = ["redis:6379"]
-                documents = self.documents({
+                values = {
                     "connections": connections,
                     "docservice": {"editorDataStorage": topology},
                     "adminpanel": {"enabled": True},
-                })
+                }
+                if secret and not (node_tls or sentinel_tls):
+                    # A CA without TLS is rejected (see RedisConnectionValidation).
+                    self.assertNotEqual(render(values).returncode, 0)
+                    continue
+                documents = self.documents(values)
                 enabled = bool(secret and (node_tls or sentinel_tls))
                 found = set()
                 for doc in documents:
@@ -265,6 +270,52 @@ class RedisAuthenticationRendering(unittest.TestCase):
                     self.assertEqual([e for e in container["env"] if e["name"] == override["name"]], [override])
                     volume = next(v for v in spec["volumes"] if v["name"] == "redis-ca-certificates")
                     self.assertEqual(volume["secret"]["items"], [{"key": "trust.pem", "path": "ca.crt"}])
+
+
+class RedisConnectionValidation(unittest.TestCase):
+    CLUSTER = {"docservice": {"editorDataStorage": "cluster"}, "connections": {"redisClusterNodes": ["redis:6379"]}}
+    SENTINEL = {"docservice": {"editorDataStorage": "sentinel"}, "connections": {"redisSentinelNodes": ["sentinel:26379"]}}
+    STANDALONE = {"docservice": {"editorDataStorage": "standalone"}, "connections": {}}
+
+    def values(self, base, **connections):
+        return {"docservice": dict(base["docservice"]),
+                "connections": {**base["connections"], **connections}}
+
+    def assertFails(self, values, message):
+        result = render(values)
+        self.assertNotEqual(result.returncode, 0, result.stdout[:200])
+        self.assertIn(message, result.stderr)
+
+    def assertRenders(self, values):
+        result = render(values)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_cluster_database(self):
+        self.assertFails(self.values(self.CLUSTER, redisDBNum="3"), "supports only database 0")
+        self.assertFails(self.values(self.CLUSTER, redisDBNum=3), "supports only database 0")
+        for db in ("0", "00", ""):
+            with self.subTest(db=db):
+                self.assertRenders(self.values(self.CLUSTER, redisDBNum=db))
+        self.assertRenders(self.values(self.CLUSTER))
+
+    def test_database_for_other_topologies(self):
+        for base in (self.STANDALONE, self.SENTINEL):
+            self.assertRenders(self.values(base, redisDBNum="3"))
+
+    def test_database_must_be_a_non_negative_integer(self):
+        for db in ("db1", "-1", "1.5"):
+            with self.subTest(db=db):
+                self.assertFails(self.values(self.STANDALONE, redisDBNum=db), "non-negative integer")
+
+    def test_ca_requires_tls(self):
+        self.assertFails(self.values(self.STANDALONE, redisCAExistingSecret="ca"), "redisCAExistingSecret is set")
+        self.assertRenders(self.values(self.STANDALONE, redisCAExistingSecret="ca", redisTLS=True))
+        self.assertRenders(self.values(self.SENTINEL, redisCAExistingSecret="ca", redisSentinelTLS=True))
+
+    def test_not_enforced_when_redis_is_not_used(self):
+        self.assertRenders({"connections": {"redisCAExistingSecret": "ca", "redisTLS": False}})
+        self.assertRenders({"connections": {"redisDBNum": "db1"}})
+        self.assertRenders({"connections": {"redisClusterNodes": ["redis:6379"], "redisDBNum": "3"}})
 
 
 class LegacyConnectorName(unittest.TestCase):

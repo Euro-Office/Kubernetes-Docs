@@ -43,7 +43,7 @@ connections:
   ## connections.redisCAExistingSecret Existing Secret containing a PEM CA bundle for Redis and Sentinel TLS.
   ## Shared by Docservice, Converter, Adminpanel and the dependency connectivity test; no manual mounts are needed.
   ## Include both issuers in the bundle if Redis and Sentinel use different CAs.
-  ## Used when connections.redisTLS or connections.redisSentinelTLS is true.
+  ## Requires connections.redisTLS or connections.redisSentinelTLS to be true; a CA secret without TLS is rejected when Redis is used.
   redisCAExistingSecret: ""
   ## connections.redisCASecretKeyName Key containing the PEM CA bundle in connections.redisCAExistingSecret.
   redisCASecretKeyName: ca.crt
@@ -56,7 +56,7 @@ connections:
   ## connections.redisDBNum Number of the redis logical database to be selected
   ## ref: https://redis.io/commands/select/
   ## The value in this parameter overrides the value set in the `options` object in `local.json` if you add custom configuration file
-  ## Not used if values are set in `connections.redisClusterNodes`
+  ## Must be a non-negative integer. Redis Cluster supports only database 0: other values are rejected when `connections.redisClusterNodes` is used
   redisDBNum: "0"
   ## connections.redisClusterNodes List of nodes in the Redis cluster
   ## There is no need to specify every node in the cluster, 3 should be enough

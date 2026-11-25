@@ -446,6 +446,8 @@ the editor data storage module for statistics as well. Configure only the
 Redis topology required by the selected mode: `redisHost` and `redisPort` for
 standalone, `redisClusterNodes` for cluster, or `redisSentinelNodes` for
 Sentinel. Cluster and Sentinel cannot be configured together.
+`connections.redisDBNum` must be a non-negative integer. Redis Cluster supports
+only database `0`, so the chart rejects any other value in Cluster mode.
 
 #### Memory storage and multiple DocService replicas
 
@@ -509,6 +511,9 @@ images do not support these flags. `REDIS_SERVER_TLS=true` enables
 `optionsCluster.defaults.socket.tls`, with `rediss://` Cluster seed URLs.
 `REDIS_SENTINEL_TLS=true` enables
 `optionsSentinel.sentinelClientOptions.socket.tls` independently.
+`connections.redisCAExistingSecret` requires `connections.redisTLS` or
+`connections.redisSentinelTLS`: the chart rejects a CA secret without TLS when
+Redis is used.
 
 The flags accept `true`/`false`; unset or empty environment values behave as
 `false` without injecting TLS options. TLS does not change the configured
@@ -626,10 +631,10 @@ can still remain authenticated.
 | `connections.redisHost`                                     | Standalone Redis host. Used only for standalone Redis; ignored when `connections.redisSentinelNodes` or `connections.redisClusterNodes` is set                                 | `redis-master`                                                                            |
 | `connections.redisPort`                                     | Standalone Redis port. Used only together with `connections.redisHost` for standalone Redis                                                                                     | `6379`                                                                                    |
 | `connections.redisTLS`                                     | Enable TLS for standalone Redis, Cluster, and Sentinel-discovered Redis nodes. Requires an image with Redis editor storage support, see [Redis editor storage image requirement](#redis-editor-storage-image-requirement).                                | `false`                                                                                   |
-| `connections.redisCAExistingSecret`                        | Existing Secret containing a PEM CA bundle, shared by application containers and the connectivity test when Redis or Sentinel TLS is enabled                                 | `""`                                                                                      |
+| `connections.redisCAExistingSecret`                        | Existing Secret containing a PEM CA bundle, shared by application containers and the connectivity test when Redis or Sentinel TLS is enabled. Requires `connections.redisTLS` or `connections.redisSentinelTLS`; the chart rejects a CA without TLS when Redis is used | `""`                                                                                      |
 | `connections.redisCASecretKeyName`                         | Key containing the PEM CA bundle in `connections.redisCAExistingSecret`                                                                                                       | `ca.crt`                                                                                  |
 | `connections.redisUser`                                     | Redis [user](https://redis.io/docs/management/security/acl/) name. Set to `""` for password-only authentication as `default`. Omitted when empty or `connections.redisNoPass` is `true` | `default`                                                                                |
-| `connections.redisDBNum`                                    | Number of the redis logical database to be [selected](https://redis.io/commands/select/). The value in this parameter overrides the value set in the `options` object in `local.json` if you add custom configuration file | `0`                                           |
+| `connections.redisDBNum`                                    | Number of the redis logical database to be [selected](https://redis.io/commands/select/). The value in this parameter overrides the value set in the `options` object in `local.json` if you add custom configuration file. Must be a non-negative integer; Redis Cluster supports only `0`, other values are rejected | `0`                                           |
 | `connections.redisClusterNodes`                             | List of nodes in the Redis cluster. There is no need to specify every node in the cluster, 3 should be enough. You can specify multiple values. It must be specified in the `host:port` format | `[]`                                                                      |
 | `connections.redisPassword`                                 | The password set for the Redis account. If set to, it takes priority over the `connections.redisExistingSecret`. The value in this parameter overrides the value set in the `options` object in `local.json` if you add custom configuration file | `""`                   |
 | `connections.redisSecretKeyName`                            | The name of the key that contains the Redis user password                                                                                                                      | `redis-password`                                                                          |
