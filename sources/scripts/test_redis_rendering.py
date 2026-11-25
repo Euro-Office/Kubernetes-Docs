@@ -267,6 +267,39 @@ class RedisAuthenticationRendering(unittest.TestCase):
                     self.assertEqual(volume["secret"]["items"], [{"key": "trust.pem", "path": "ca.crt"}])
 
 
+class LegacyConnectorName(unittest.TestCase):
+    NOTICE = "connections.redisConnectorName is obsolete since chart 8.0.0"
+
+    def notes(self, values):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as overrides:
+            json.dump(values, overrides)
+            overrides.flush()
+            result = subprocess.run(
+                ["helm", "install", "connector-test", str(CHART), "--dry-run=client", "-f", overrides.name],
+                text=True, capture_output=True, check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.split("NOTES:", 1)[1]
+
+    def test_other_values_fail(self):
+        for name in ("ioredis", "something"):
+            with self.subTest(name=name):
+                result = render({"connections": {"redisConnectorName": name}})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("was removed in chart 8.0.0", result.stderr)
+                self.assertIn("editorDataStorage: sentinel", result.stderr)
+
+    def test_redis_is_ignored_with_notice(self):
+        self.assertEqual(render({"connections": {"redisConnectorName": "redis"}}).returncode, 0)
+        self.assertIn(self.NOTICE, self.notes({"connections": {"redisConnectorName": "redis"}}))
+
+    def test_absent_empty_and_null_are_silent(self):
+        for connections in ({}, {"redisConnectorName": ""}, {"redisConnectorName": None}):
+            with self.subTest(connections=connections):
+                self.assertEqual(render({"connections": connections}).returncode, 0)
+                self.assertNotIn(self.NOTICE, self.notes({"connections": connections}))
+
+
 class MemoryMultiReplicaWarning(unittest.TestCase):
     """helm template does not render NOTES.txt; helm install --dry-run=client does, without a cluster."""
 

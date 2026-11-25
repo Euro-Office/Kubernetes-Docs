@@ -12,6 +12,12 @@ WARNING: In-memory editor storage with more than one DocService Pod.
 
 {{- end }}
 
+{{- if eq (toString (default "" .Values.connections.redisConnectorName)) "redis" }}
+
+NOTE: connections.redisConnectorName is obsolete since chart 8.0.0 and is ignored. Remove it from your values.
+
+{{- end }}
+
 {{- if .Values.example.enabled }}
 
 Example was marked for installation.

@@ -82,6 +82,10 @@ Validate editor storage modes and their Redis topology requirements.
 {{- if and (eq (include "ds.redis.enabled" .) "true") (not .Values.connections.redisNoPass) (empty .Values.connections.redisPassword) (empty .Values.connections.redisExistingSecret) -}}
   {{- fail "Authenticated Redis requires connections.redisPassword or connections.redisExistingSecret." -}}
 {{- end -}}
+{{- $legacyConnector := toString (default "" .Values.connections.redisConnectorName) -}}
+{{- if and $legacyConnector (ne $legacyConnector "redis") -}}
+  {{- fail (printf "connections.redisConnectorName (%q) was removed in chart 8.0.0. For Redis Sentinel set docservice.editorDataStorage: sentinel and connections.redisSentinelNodes (and redisSentinelGroupName); see the 8.0.0 CHANGELOG. Remove redisConnectorName from your values." $legacyConnector) -}}
+{{- end -}}
 {{- $redisWanted := eq (include "ds.redis.enabled" .) "true" -}}
 {{- $minVersion := include "ds.redis.minImageVersion" . | trim -}}
 {{- $imageVersion := include "ds.versionGate.version" . -}}

@@ -5,7 +5,7 @@
 ### Breaking Changes
 
 * Release requirement: chart 8.0.0 must be released together with the first DocumentServer release containing Redis editor storage support; set `appVersion`, `images.tag` and `ds.redis.minImageVersion` to that version
-* Removed the `connections.redisConnectorName` parameter (the `ioredis` switch for Redis Sentinel). Sentinel mode is now enabled when `connections.redisSentinelNodes` is not empty, and Redis Cluster mode when `connections.redisClusterNodes` is not empty. Remove `redisConnectorName` from your values files
+* Removed the `connections.redisConnectorName` parameter (the `ioredis` switch for Redis Sentinel). Sentinel mode is now enabled when `connections.redisSentinelNodes` is not empty, and Redis Cluster mode when `connections.redisClusterNodes` is not empty. Remove `redisConnectorName` from your values files. Setting it to `ioredis` (or any value other than `redis`) now fails the install/upgrade with a migration message; `redis` is ignored with a notice
 * `REDIS_SENTINEL_PWD` is now rendered only if `connections.redisSentinelNodes` is set and `connections.redisSentinelNoPass` is `false` (the default is `true`), and `REDIS_SERVER_PWD` is no longer rendered if `connections.redisNoPass` is `true`. Users who set `redisConnectorName: ioredis` with an authenticated Sentinel must set `connections.redisSentinelNodes`, `connections.redisSentinelGroupName` and `connections.redisSentinelNoPass: false`
 
 ### New Features
