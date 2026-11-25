@@ -26,6 +26,7 @@
 
 ### Fixes
 
+* Clarified that `connections.redisHost` and `connections.redisPort` are used only for standalone Redis and are ignored when Sentinel or Cluster nodes are set
 * Fixed `helm test` reporting success when a check other than `CheckDS` failed. Skipped checks do not fail the run
 * Memory editor storage (the default) no longer requires Redis: the Redis password env, Secrets, CA wiring and password validation are rendered only when `editorDataStorage` or `editorStatStorage` is a Redis mode. `test-ds` reports `CheckRedis` as `Skipped` otherwise
 * The `test-ds` Redis check now writes a temporary `ds:helm-test:<uuid>` key with a 60 second expiry, so ACL users restricted to `~ds:*` work

@@ -31,12 +31,11 @@ connections:
   ## connections.dbPassword Database user password
   ## If set to, it takes priority over the `connections.dbExistingSecret`
   dbPassword: ""
-  ## connections.redisHost The IP address or the name of the Redis host
-  ## Used for standalone Redis and as the startup/readiness fallback when a topology is configured.
-  ## In Sentinel mode, set this to a reachable fallback endpoint; Sentinel discovery uses redisSentinelNodes.
+  ## connections.redisHost The IP address or the name of the standalone Redis host
+  ## Used only for standalone Redis. Ignored when connections.redisSentinelNodes or connections.redisClusterNodes is set.
   redisHost: redis-master
-  ## connections.redisPort The Redis server port number
-  ## Used with connections.redisHost for the standalone/startup fallback endpoint.
+  ## connections.redisPort The standalone Redis server port number
+  ## Used only together with connections.redisHost for standalone Redis.
   redisPort: "6379"
   ## connections.redisTLS Enable TLS for standalone Redis, Cluster, and Sentinel-discovered Redis nodes
   ## Requires a DocumentServer image with Redis editor storage support (Euro-Office/DocumentServer PR #386); see 'Redis editor storage image requirement'. Ports remain unchanged.
