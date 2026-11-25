@@ -235,15 +235,23 @@ Return Redis Sentinel password
 {{- end }}
 {{- end -}}
 
-{{/* Render only native Redis secret variables. Users are in the ConfigMap. */}}
+{{/* Render the native Redis user and secret variables, only for the Pods that use Redis (not the Converter). */}}
 {{- define "ds.redis.env" -}}
 {{- if eq (include "ds.redis.enabled" .) "true" }}
+{{- if and (not .Values.connections.redisNoPass) .Values.connections.redisUser }}
+- name: REDIS_SERVER_USER
+  value: {{ .Values.connections.redisUser | quote }}
+{{- end }}
 {{- if not .Values.connections.redisNoPass }}
 - name: REDIS_SERVER_PWD
   valueFrom:
     secretKeyRef:
       name: {{ template "ds.redis.secretName" . }}
       key: {{ .Values.connections.redisSecretKeyName }}
+{{- end }}
+{{- if and .Values.connections.redisSentinelNodes (not .Values.connections.redisSentinelNoPass) .Values.connections.redisSentinelUser }}
+- name: REDIS_SENTINEL_USER
+  value: {{ .Values.connections.redisSentinelUser | quote }}
 {{- end }}
 {{- if and .Values.connections.redisSentinelNodes (not .Values.connections.redisSentinelNoPass) }}
 - name: REDIS_SENTINEL_PWD

@@ -51,10 +51,14 @@ class RedisAuthenticationRendering(unittest.TestCase):
         defaults = yaml.safe_load((CHART / "values.yaml").read_text())["connections"]
         self.assertEqual(defaults["redisUser"], "default")
         self.assertEqual(defaults["redisSentinelUser"], "")
-        documents = self.documents({})
+        # The usernames are env entries of the Redis-using Pods, not ConfigMap data (see RedisUsersInEnv).
+        documents = self.documents({"docservice": {"editorDataStorage": "standalone"}})
         config = next(doc["data"] for doc in documents if doc["metadata"]["name"] == "documentserver")
-        self.assertEqual(config["REDIS_SERVER_USER"], "default")
-        self.assertNotIn("REDIS_SENTINEL_USER", config)
+        self.assertNotIn("REDIS_SERVER_USER", config)
+        docservice = next(doc for doc in documents if doc["kind"] == "Deployment" and doc["metadata"]["name"] == "docservice")
+        env = {e["name"]: e.get("value") for env in environment_lists(docservice) for e in env}
+        self.assertEqual(env["REDIS_SERVER_USER"], "default")
+        self.assertNotIn("REDIS_SENTINEL_USER", env)
 
     def test_authentication_matrix(self):
         for topology, node_mode, source in itertools.product(
@@ -83,6 +87,12 @@ class RedisAuthenticationRendering(unittest.TestCase):
                         "docservice": {"editorDataStorage": topology},
                     })
                     config = next(doc["data"] for doc in documents if doc["metadata"]["name"] == "documentserver")
+                    self.assertFalse({"REDIS_SERVER_USER", "REDIS_SENTINEL_USER"} & set(config))
+                    # The usernames are env entries of the Pods that use Redis (see RedisUsersInEnv).
+                    docservice = next(doc for doc in documents
+                                      if doc["kind"] == "Deployment" and doc["metadata"]["name"] == "docservice")
+                    user_env = {entry["name"]: entry.get("value")
+                                for env in environment_lists(docservice) for entry in env}
                     secrets = {doc["metadata"]["name"]: doc for doc in documents if doc["kind"] == "Secret"}
                     for env_prefix, prefix, mode, password in (
                         ("REDIS_SERVER", "redis", node_mode, "node-password"),
@@ -90,9 +100,9 @@ class RedisAuthenticationRendering(unittest.TestCase):
                     ):
                         enabled = mode != "none" and (prefix == "redis" or topology == "sentinel")
                         if enabled and AUTH_MODES[mode]:
-                            self.assertEqual(config[env_prefix + "_USER"], AUTH_MODES[mode])
+                            self.assertEqual(user_env[env_prefix + "_USER"], AUTH_MODES[mode])
                         else:
-                            self.assertNotIn(env_prefix + "_USER", config)
+                            self.assertNotIn(env_prefix + "_USER", user_env)
                         refs = [entry["valueFrom"]["secretKeyRef"]
                                 for env in environment_lists(documents)
                                 for entry in env if entry["name"] == env_prefix + "_PWD"]
@@ -276,6 +286,52 @@ class RedisAuthenticationRendering(unittest.TestCase):
                         continue
                     volume = next(v for v in spec["volumes"] if v["name"] == "redis-ca-certificates")
                     self.assertEqual(volume["secret"]["items"], [{"key": "trust.pem", "path": "ca.crt"}])
+
+
+class RedisUsersInEnv(unittest.TestCase):
+    """Redis usernames are env entries of the Pods that use Redis; the shared ConfigMap has none."""
+
+    CASES = {
+        "standalone": ({"docservice": {"editorDataStorage": "standalone"},
+                        "connections": {"redisUser": "appuser"}},
+                       {"REDIS_SERVER_USER": "appuser"}),
+        "sentinel": ({"docservice": {"editorDataStorage": "sentinel"},
+                      "connections": {"redisSentinelNodes": ["sentinel:26379"], "redisSentinelNoPass": False,
+                                      "redisSentinelUser": "sentuser", "redisSentinelPassword": "x"}},
+                     {"REDIS_SERVER_USER": "default", "REDIS_SENTINEL_USER": "sentuser"}),
+    }
+
+    def test_users_reach_only_the_redis_pods(self):
+        for name, (values, expected) in self.CASES.items():
+            with self.subTest(case=name):
+                result = render({"adminpanel": {"enabled": True}, **values})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                documents = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+                config = next(doc for doc in documents if doc["kind"] == "ConfigMap" and doc["metadata"]["name"] == "documentserver")
+                self.assertFalse({"REDIS_SERVER_USER", "REDIS_SENTINEL_USER"} & set(config["data"]))
+                seen = set()
+                for doc in documents:
+                    if doc["kind"] not in ("Deployment", "StatefulSet", "Pod"):
+                        continue
+                    pod = doc["spec"].get("template", doc)["spec"] if doc["kind"] != "Pod" else doc["spec"]
+                    for container in pod["containers"]:
+                        label = container["name"]
+                        if label not in ("docservice", "adminpanel", "test-ds", "converter"):
+                            continue
+                        seen.add(label)
+                        env = {e["name"]: e.get("value") for e in container.get("env", [])}
+                        if label == "converter":
+                            self.assertFalse({"REDIS_SERVER_USER", "REDIS_SENTINEL_USER"} & set(env))
+                            # No envFrom source may provide them either: only the shared ConfigMap and Secrets.
+                            for source in container.get("envFrom", []):
+                                if "configMapRef" in source:
+                                    self.assertEqual(source["configMapRef"]["name"], "documentserver")
+                        else:
+                            for key, value in expected.items():
+                                self.assertEqual(env.get(key), value, label)
+                            if name == "standalone":
+                                self.assertNotIn("REDIS_SENTINEL_USER", env)
+                self.assertEqual(seen, {"docservice", "adminpanel", "test-ds", "converter"})
 
 
 class ConverterGetsNoRedis(unittest.TestCase):

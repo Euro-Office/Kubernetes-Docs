@@ -21,7 +21,7 @@
 
 ### Changes
 
-* The Converter no longer receives Redis credentials or the Redis CA: it does not use Redis. Only the Docservice, Adminpanel and the test Pods do. The Converter Pods are restarted once on upgrade
+* The Converter no longer receives Redis credentials or the Redis CA: it does not use Redis. Only the Docservice, Adminpanel and the test Pods do. The Redis usernames (`REDIS_SERVER_USER`, `REDIS_SENTINEL_USER`) moved from the shared `documentserver` ConfigMap to the env of the Redis-using Pods, because the entrypoint rejects a Sentinel user without a password. All Pods that use the ConfigMap and the Converter Pods restart once on upgrade
 * The Redis password environment variables are now rendered by shared helpers in all workloads and in the test Pod
 * The test Pod selects the Redis mode from `REDIS_SENTINEL_NODES` and `REDIS_CLUSTER_NODES` instead of `REDIS_CONNECTOR_NAME`
 * README: documented the Redis storage topologies, TLS and authentication secrets; fixed the parameter name `connections.redistHost` to `connections.redisHost`
