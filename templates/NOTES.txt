@@ -1,6 +1,17 @@
 RELEASE VERSION: {{ .Chart.Version }}
 APP VERSION: {{ .Chart.AppVersion }}
 
+{{- if eq (include "ds.editor.memoryMultiReplica" .) "true" }}
+
+WARNING: In-memory editor storage with more than one DocService Pod.
+  docservice.editorDataStorage is "memory" and docservice runs {{ .Values.docservice.replicas }} replicas{{ if .Values.docservice.autoscaling.enabled }} with autoscaling{{ end }}.
+  Co-editing state (locks, chat, save status, presence) is kept per Pod and the chart does not route all
+  users of a document to the same Pod, so co-editors on different Pods can overwrite each other's changes.
+  Use a Redis editor storage mode (docservice.editorDataStorage: standalone, sentinel or cluster) or run a
+  single DocService replica without autoscaling. See "Editor data and statistics storage" in the README.
+
+{{- end }}
+
 {{- if .Values.example.enabled }}
 
 Example was marked for installation.

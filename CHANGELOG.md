@@ -10,6 +10,7 @@
 
 ### New Features
 
+* Added a post-install warning (`NOTES.txt`) for in-memory editor storage with more than one DocService replica or with autoscaling, because the co-editing state is per Pod and the chart has no document-affinity routing
 * Added a DocumentServer version gate for Redis editor storage (`ds.redis.minImageVersion` in `templates/_helpers.tpl`). It rejects known older numeric `docservice` image tags when a Redis storage mode is selected and is inactive until the minimum DocumentServer version is set
 * Added configurable editor storage: `docservice.editorDataStorage` (`memory`, `standalone`, `sentinel` or `cluster`, default `memory`) and `docservice.editorStatStorage` (defaults to the value of `editorDataStorage`). The chart fails to render for unsupported modes and for conflicting Redis topologies
 * Added Redis and Sentinel TLS support (`connections.redisTLS`, `connections.redisSentinelTLS`) and a shared private CA bundle (`connections.redisCAExistingSecret`, `connections.redisCASecretKeyName`) mounted into the Docservice, Converter, Adminpanel and test Pods. Requires a DocumentServer image with the Redis TLS changes

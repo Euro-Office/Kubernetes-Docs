@@ -22,6 +22,15 @@ Whether DocService uses Redis: true when editor data or editor statistics storag
 {{- end -}}
 
 {{/*
+Whether editor data is kept in memory while more than one DocService Pod can run (replicas > 1 or autoscaling).
+In memory mode the co-editing state is per Pod and the chart has no document-affinity routing.
+*/}}
+{{- define "ds.editor.memoryMultiReplica" -}}
+{{- $dataStorage := default "memory" .Values.docservice.editorDataStorage -}}
+{{- if and (eq $dataStorage "memory") (or (gt (int .Values.docservice.replicas) 1) .Values.docservice.autoscaling.enabled) -}}true{{- end -}}
+{{- end -}}
+
+{{/*
 Minimum DocumentServer version that supports Redis editor storage and the Redis TLS settings
 (Euro-Office/DocumentServer PR #386). Empty until that DocumentServer release is tagged; while empty the
 version gate in ds.editor.storage.validate is inactive. Set it to the released version (e.g. "X.Y.Z") when

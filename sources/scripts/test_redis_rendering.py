@@ -267,6 +267,49 @@ class RedisAuthenticationRendering(unittest.TestCase):
                     self.assertEqual(volume["secret"]["items"], [{"key": "trust.pem", "path": "ca.crt"}])
 
 
+class MemoryMultiReplicaWarning(unittest.TestCase):
+    """helm template does not render NOTES.txt; helm install --dry-run=client does, without a cluster."""
+
+    WARNING = "WARNING: In-memory editor storage with more than one DocService Pod."
+
+    def notes(self, values):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as overrides:
+            json.dump(values, overrides)
+            overrides.flush()
+            result = subprocess.run(
+                ["helm", "install", "notes-test", str(CHART), "--dry-run=client", "-f", overrides.name],
+                text=True, capture_output=True, check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.split("NOTES:", 1)[1]
+
+    def test_default_warns(self):
+        notes = self.notes({})
+        self.assertIn(self.WARNING, notes)
+        self.assertIn("runs 2 replicas.", notes)
+        self.assertNotIn("with autoscaling", notes)
+
+    def test_single_replica_does_not_warn(self):
+        self.assertNotIn(self.WARNING, self.notes({"docservice": {"replicas": 1}}))
+
+    def test_autoscaling_warns(self):
+        notes = self.notes({"docservice": {"replicas": 1, "autoscaling": {"enabled": True}}})
+        self.assertIn(self.WARNING, notes)
+        self.assertIn("with autoscaling", notes)
+
+    def test_redis_data_storage_does_not_warn(self):
+        for stat in ("", "memory"):
+            with self.subTest(stat=stat):
+                notes = self.notes({"docservice": {"editorDataStorage": "standalone", "editorStatStorage": stat,
+                                                   "replicas": 2}})
+                self.assertNotIn(self.WARNING, notes)
+
+    def test_memory_data_with_redis_statistics_warns(self):
+        notes = self.notes({"docservice": {"editorDataStorage": "memory", "editorStatStorage": "standalone",
+                                           "replicas": 2}})
+        self.assertIn(self.WARNING, notes)
+
+
 class RedisNotUsedInMemoryMode(unittest.TestCase):
     """Memory editor storage needs no Redis Secret, credentials or CA wiring."""
 

@@ -447,6 +447,25 @@ Redis topology required by the selected mode: `redisHost` and `redisPort` for
 standalone, `redisClusterNodes` for cluster, or `redisSentinelNodes` for
 Sentinel. Cluster and Sentinel cannot be configured together.
 
+#### Memory storage and multiple DocService replicas
+
+In memory mode the co-editing state is kept in the memory of each DocService
+Pod: locks, chat messages, save and force-save state and presence. When
+`editorStatStorage` is also `memory`, the statistics are per Pod too, so the
+AdminPanel and statistics counts cover only the Pod that answers the request.
+
+The chart has no document-affinity routing. With more than one DocService Pod
+(`docservice.replicas` above 1, or `docservice.autoscaling.enabled`), the
+co-editors of one document can reach different Pods and see inconsistent state,
+and can overwrite each other's changes. The default values (memory storage,
+2 replicas) are in this situation. The chart does not fail, but prints a
+warning after install and upgrade.
+
+For more than one replica, use a Redis editor storage mode
+(`docservice.editorDataStorage: standalone`, `sentinel` or `cluster`). To keep
+memory mode, run a single replica (`docservice.replicas: 1`) and leave
+autoscaling disabled.
+
 #### Redis editor storage image requirement
 
 Redis editor storage needs a DocumentServer image with Redis editor storage
@@ -1498,7 +1517,7 @@ The `upgrade.job.enabled` and `rollback.job.enabled` parameters are `true` by de
 * **Tags without a numeric version** (`latest`, a digest) disable the gate: the Jobs cannot tell whether the version changed, so they reset the tables on every `helm upgrade` and `helm rollback`. Use a versioned tag.
 * **Delete** is off by default: `helm uninstall` keeps the tables unless you set `delete.job.enabled=true`.
 
-The editor state is kept in the memory of each Docservice Pod. The `inactive` request is sent to all Docservice Pods, but the wait only counts the open documents on the Pod that received it. With more than one Docservice replica, run version upgrades (and rollbacks) in a quiet window with no active editing sessions: otherwise the tables may be dropped while other Pods are still saving. The same applies to `delete.job.enabled=true`.
+In memory editor storage mode the editor state is kept in the memory of each Docservice Pod (see [Memory storage and multiple DocService replicas](#memory-storage-and-multiple-docservice-replicas)). The `inactive` request is sent to all Docservice Pods, but the wait only counts the open documents on the Pod that received it. With more than one Docservice replica, run version upgrades (and rollbacks) in a quiet window with no active editing sessions: otherwise the tables may be dropped while other Pods are still saving. The same applies to `delete.job.enabled=true`.
 
 The `PUT /internal/cluster/inactive` call takes at least 30 seconds, even with no open editors: after sending the shutdown to all Docservice Pods, the server waits a fixed 30 seconds for delivery before it checks for open documents. It returns `false` if documents are still being saved after 30 seconds plus the conversion timeout; the `pre-upgrade` Job then stops, while `pre-rollback` and `pre-delete` continue. Allow for this delay in the `--timeout` of `helm upgrade`, `helm rollback` and `helm uninstall` (default 300s). The Jobs use `backoffLimit: 2`, so a failed attempt is retried and repeats the call.
 
