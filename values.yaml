@@ -41,7 +41,7 @@ connections:
   ## Requires a DocumentServer image with Redis editor storage support (Euro-Office/DocumentServer PR #386); see 'Redis editor storage image requirement'. Ports remain unchanged.
   redisTLS: false
   ## connections.redisCAExistingSecret Existing Secret containing a PEM CA bundle for Redis and Sentinel TLS.
-  ## Shared by Docservice, Converter, Adminpanel and the dependency connectivity test; no manual mounts are needed.
+  ## Shared by Docservice, Adminpanel and the dependency connectivity test (Converter does not use Redis and does not receive it); no manual mounts are needed.
   ## Include both issuers in the bundle if Redis and Sentinel use different CAs.
   ## Requires connections.redisTLS or connections.redisSentinelTLS to be true; a CA secret without TLS is rejected when Redis is used.
   redisCAExistingSecret: ""
@@ -2528,7 +2528,7 @@ tests:
   ## ref:https://kubernetes.io/docs/concepts/workloads/pods/init-containers/
   initContainers: []
   ## tests.extraEnvVars Extra environment variables for the dependency connectivity test container.
-  ## connections.redisCAExistingSecret configures private-CA trust for application and test Pods together.
+  ## connections.redisCAExistingSecret configures private-CA trust for the Docservice, Adminpanel and test Pods together.
   ## Optionally override REDIS_SERVER_CA_CERTS and REDIS_SENTINEL_CA_CERTS with test-specific PEM bundle paths.
   ## Each path is used only when its corresponding connections.redisTLS or connections.redisSentinelTLS is true.
   extraEnvVars: []

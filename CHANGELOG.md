@@ -14,13 +14,14 @@
 * Added a post-install warning (`NOTES.txt`) for in-memory editor storage with more than one DocService replica or with autoscaling, because the co-editing state is per Pod and the chart has no document-affinity routing
 * Added a DocumentServer version gate for Redis editor storage (`ds.redis.minImageVersion` in `templates/_helpers.tpl`). It rejects known older numeric `docservice` image tags when a Redis storage mode is selected and is inactive until the minimum DocumentServer version is set
 * Added configurable editor storage: `docservice.editorDataStorage` (`memory`, `standalone`, `sentinel` or `cluster`, default `memory`) and `docservice.editorStatStorage` (defaults to the value of `editorDataStorage`). The chart fails to render for unsupported modes and for conflicting Redis topologies
-* Added Redis and Sentinel TLS support (`connections.redisTLS`, `connections.redisSentinelTLS`) and a shared private CA bundle (`connections.redisCAExistingSecret`, `connections.redisCASecretKeyName`) mounted into the Docservice, Converter, Adminpanel and test Pods. Requires a DocumentServer image with the Redis TLS changes
+* Added Redis and Sentinel TLS support (`connections.redisTLS`, `connections.redisSentinelTLS`) and a shared private CA bundle (`connections.redisCAExistingSecret`, `connections.redisCASecretKeyName`) mounted into the Docservice, Adminpanel and test Pods. Requires a DocumentServer image with the Redis TLS changes
 * Added password-only and named ACL user authentication for Redis and Sentinel (`connections.redisUser: ""` omits the username, new `connections.redisSentinelUser`)
 * Added `tests.extraEnvVars`, `tests.extraVolumes` and `tests.extraVolumeMounts` for the test Pod
 * Added example values files `demo/my-values.redis-standalone.yml`, `demo/my-values.redis-data-only.yml`, `demo/my-values.redis-sentinel.yml` and `demo/my-values.redis-cluster.yml`, and a `test-redis-config` test (`test_redis_config.sh`). `helm test` runs it for any Redis-backed storage mode: it checks that the DocService image selects the requested storage and topology, and fails fast on images without Redis storage support. Connectivity, authentication and TLS are checked by `test-ds`
 
 ### Changes
 
+* The Converter no longer receives Redis credentials or the Redis CA: it does not use Redis. Only the Docservice, Adminpanel and the test Pods do. The Converter Pods are restarted once on upgrade
 * The Redis password environment variables are now rendered by shared helpers in all workloads and in the test Pod
 * The test Pod selects the Redis mode from `REDIS_SENTINEL_NODES` and `REDIS_CLUSTER_NODES` instead of `REDIS_CONNECTOR_NAME`
 * README: documented the Redis storage topologies, TLS and authentication secrets; fixed the parameter name `connections.redistHost` to `connections.redisHost`

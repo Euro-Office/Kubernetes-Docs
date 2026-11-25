@@ -149,9 +149,6 @@ spec:
         {{- with .Values.converter.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{- with (include "ds.redis.ca.volume" . | trim) }}
-        {{- . | nindent 8 }}
-        {{- end }}
       terminationGracePeriodSeconds: {{ .Values.converter.terminationGracePeriodSeconds }}
       {{- if .Values.converter.hostAliases }}
       hostAliases: {{- toYaml .Values.converter.hostAliases | nindent 8 }}
@@ -200,12 +197,6 @@ spec:
               secretKeyRef:
                 name: {{ tpl .Values.connections.amqpUserExistingSecret $ }}
                 key: {{ .Values.connections.amqpUserSecretKeyName }}
-          {{- end }}
-          {{- with (include "ds.redis.env" . | trim) }}
-          {{- . | nindent 10 }}
-          {{- end }}
-          {{- with (include "ds.redis.ca.env" (dict "context" . "extraEnvVars" .Values.converter.extraEnvVars) | trim) }}
-          {{- . | nindent 10 }}
           {{- end }}
           {{- with .Values.converter.extraEnvVars }}
           {{- toYaml . | nindent 10 }}
@@ -282,7 +273,4 @@ spec:
           {{- end }}
           {{- with .Values.converter.extraVolumeMounts }}
           {{- toYaml . | nindent 10 }}
-          {{- end }}
-          {{- with (include "ds.redis.ca.mount" . | trim) }}
-          {{- . | nindent 10 }}
           {{- end }}

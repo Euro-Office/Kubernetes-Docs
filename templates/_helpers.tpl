@@ -255,7 +255,7 @@ Return Redis Sentinel password
 {{- end }}
 {{- end -}}
 
-{{/* Share Redis CA trust between the application containers and the connectivity hook (only when Redis is used). */}}
+{{/* Share Redis CA trust between the Docservice and Adminpanel containers and the connectivity hook (only when Redis is used). */}}
 {{- define "ds.redis.ca.enabled" -}}
 {{- $tls := or .Values.connections.redisTLS .Values.connections.redisSentinelTLS -}}
 {{- if and (eq (include "ds.redis.enabled" .) "true") .Values.connections.redisCAExistingSecret $tls -}}

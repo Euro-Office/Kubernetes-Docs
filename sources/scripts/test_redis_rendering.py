@@ -222,7 +222,7 @@ class RedisAuthenticationRendering(unittest.TestCase):
                     self.assertNotEqual(render(values).returncode, 0)
                     continue
                 documents = self.documents(values)
-                enabled = bool(secret and (node_tls or sentinel_tls))
+                enabled_all = bool(secret and (node_tls or sentinel_tls))
                 found = set()
                 for doc in documents:
                     spec = doc.get("spec", {})
@@ -232,6 +232,8 @@ class RedisAuthenticationRendering(unittest.TestCase):
                         if component not in ("docservice", "converter", "adminpanel", "test-ds"):
                             continue
                         found.add(component)
+                        # The Converter does not use Redis and gets no Redis CA.
+                        enabled = enabled_all and component != "converter"
                         env = {e["name"]: e for e in container.get("env", [])}
                         volumes = [v for v in spec["volumes"] if v["name"] == "redis-ca-certificates"]
                         mounts = [v for v in container["volumeMounts"] if v["name"] == "redis-ca-certificates"]
@@ -268,8 +270,63 @@ class RedisAuthenticationRendering(unittest.TestCase):
             for container in spec["containers"]:
                 if container["name"] in ("docservice", "converter", "adminpanel"):
                     self.assertEqual([e for e in container["env"] if e["name"] == override["name"]], [override])
+                    if container["name"] == "converter":
+                        # The Converter does not use Redis: its own override stays, and no Redis CA volume is added.
+                        self.assertNotIn("redis-ca-certificates", [v["name"] for v in spec["volumes"]])
+                        continue
                     volume = next(v for v in spec["volumes"] if v["name"] == "redis-ca-certificates")
                     self.assertEqual(volume["secret"]["items"], [{"key": "trust.pem", "path": "ca.crt"}])
+
+
+class ConverterGetsNoRedis(unittest.TestCase):
+    """Converter never uses Redis: no credentials, CA env, volume or mount, whatever the Redis settings."""
+
+    def components(self, values):
+        result = render({"adminpanel": {"enabled": True}, **values})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        found = {}
+        for doc in yaml.safe_load_all(result.stdout):
+            if doc and doc["kind"] in ("Deployment", "StatefulSet"):
+                spec = doc["spec"]["template"]["spec"]
+                for container in spec["containers"]:
+                    if container["name"] in ("docservice", "converter", "adminpanel"):
+                        found[container["name"]] = (container, spec)
+        self.assertEqual(set(found), {"docservice", "converter", "adminpanel"})
+        return found
+
+    def test_standalone_with_tls_and_ca(self):
+        found = self.components({
+            "docservice": {"editorDataStorage": "standalone"},
+            "connections": {"redisTLS": True, "redisCAExistingSecret": "my-ca", "redisPassword": "pw"},
+        })
+        redis_env = {"REDIS_SERVER_PWD", "REDIS_SENTINEL_PWD", "NODE_EXTRA_CA_CERTS"}
+        for name, (container, spec) in found.items():
+            env = {entry["name"] for entry in container.get("env", [])}
+            volumes = [v["name"] for v in spec.get("volumes", [])]
+            mounts = [m["name"] for m in container.get("volumeMounts", [])]
+            if name == "converter":
+                self.assertFalse(env & redis_env)
+                self.assertNotIn("redis-ca-certificates", volumes)
+                self.assertNotIn("redis-ca-certificates", mounts)
+                self.assertNotIn("my-ca", json.dumps(spec))
+            else:
+                self.assertIn("REDIS_SERVER_PWD", env, name)
+                self.assertIn("NODE_EXTRA_CA_CERTS", env, name)
+                self.assertIn("redis-ca-certificates", volumes, name)
+                self.assertIn("redis-ca-certificates", mounts, name)
+
+    def test_converter_keeps_its_own_ca_override(self):
+        override = {"name": "NODE_EXTRA_CA_CERTS", "value": "/converter/ca.pem"}
+        found = self.components({"converter": {"extraEnvVars": [override]}})
+        env = [e for e in found["converter"][0]["env"] if e["name"] == "NODE_EXTRA_CA_CERTS"]
+        self.assertEqual(env, [override])
+
+    def test_statistics_in_redis_only_for_adminpanel_and_docservice(self):
+        found = self.components({"docservice": {"editorDataStorage": "memory", "editorStatStorage": "standalone"},
+                                 "connections": {"redisPassword": "pw"}})
+        for name, (container, _) in found.items():
+            env = {entry["name"] for entry in container.get("env", [])}
+            self.assertEqual("REDIS_SERVER_PWD" in env, name != "converter", name)
 
 
 class RedisConnectionValidation(unittest.TestCase):
@@ -450,7 +507,8 @@ class RedisNotUsedInMemoryMode(unittest.TestCase):
             with self.subTest(values=values):
                 _, documents = self.documents(values)
                 for name, doc in self.workloads(documents).items():
-                    self.assertIn("REDIS_SERVER_PWD", self.env_names(doc), name)
+                    # The Converter does not use Redis (see ConverterGetsNoRedis).
+                    self.assertEqual("REDIS_SERVER_PWD" in self.env_names(doc), name != "converter", name)
 
     def test_redis_mode_still_requires_password(self):
         result = render({"docservice": {"editorDataStorage": "standalone"},
