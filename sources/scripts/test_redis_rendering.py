@@ -122,7 +122,7 @@ class RedisAuthenticationRendering(unittest.TestCase):
                 self.assertRegex(result.stderr, "Authenticated Redis requires connections.redisPassword or connections.redisExistingSecret|A Redis Password is required!")
         for node_no_pass, username in itertools.product((True, False), ("", "sentinel-user")):
             with self.subTest(node_no_pass=node_no_pass, sentinel_username=username):
-                result = render({"connections": {
+                result = render({"docservice": {"editorDataStorage": "sentinel"}, "connections": {
                     "redisNoPass": node_no_pass,
                     "redisSentinelNodes": ["sentinel:26379"],
                     "redisSentinelUser": username,
@@ -253,7 +253,7 @@ class RedisAuthenticationRendering(unittest.TestCase):
             "connections": {"redisTLS": True, "redisCAExistingSecret": "redis-ca",
                             "redisCASecretKeyName": "trust.pem"},
             "adminpanel": {"enabled": True, "extraEnvVars": [override]},
-            "docservice": {"extraEnvVars": [override]},
+            "docservice": {"editorDataStorage": "standalone", "extraEnvVars": [override]},
             "converter": {"extraEnvVars": [override]},
         })
         for doc in documents:
@@ -265,6 +265,79 @@ class RedisAuthenticationRendering(unittest.TestCase):
                     self.assertEqual([e for e in container["env"] if e["name"] == override["name"]], [override])
                     volume = next(v for v in spec["volumes"] if v["name"] == "redis-ca-certificates")
                     self.assertEqual(volume["secret"]["items"], [{"key": "trust.pem", "path": "ca.crt"}])
+
+
+class RedisNotUsedInMemoryMode(unittest.TestCase):
+    """Memory editor storage needs no Redis Secret, credentials or CA wiring."""
+
+    WORKLOADS = ("docservice", "converter", "adminpanel", "test-ds")
+    FORBIDDEN_ENV = ("REDIS_SERVER_PWD", "REDIS_SENTINEL_PWD", "NODE_EXTRA_CA_CERTS",
+                     "REDIS_SERVER_CA_CERTS", "REDIS_SENTINEL_CA_CERTS")
+
+    def documents(self, values):
+        values = {"adminpanel": {"enabled": True}, **values}
+        result = render(values)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout, [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+
+    def workloads(self, documents):
+        found = {}
+        for doc in documents:
+            name = doc["metadata"]["name"]
+            if doc["kind"] in ("Deployment", "StatefulSet", "Pod") and name in self.WORKLOADS:
+                found[name] = doc
+        self.assertEqual(set(found), set(self.WORKLOADS))
+        return found
+
+    def env_names(self, doc):
+        return {entry["name"] for env in environment_lists(doc) for entry in env or []}
+
+    def assert_no_redis(self, values):
+        text, documents = self.documents(values)
+        for name, doc in self.workloads(documents).items():
+            self.assertFalse(self.env_names(doc) & set(self.FORBIDDEN_ENV), name)
+        self.assertNotIn("redis-ca-certificates", text)
+        self.assertNotIn("kind: Secret\nmetadata:\n  name: t-redis", text)
+        secrets = [doc["metadata"]["name"] for doc in documents if doc["kind"] == "Secret"]
+        self.assertFalse([name for name in secrets if "redis" in name], secrets)
+
+    def test_memory_default(self):
+        self.assert_no_redis({})
+
+    def test_memory_ignores_secrets_and_tls(self):
+        self.assert_no_redis({"connections": {"redisPassword": "pw", "redisSentinelPassword": "spw",
+                                              "redisSentinelNodes": ["sentinel:26379"],
+                                              "redisSentinelNoPass": False,
+                                              "redisTLS": True, "redisSentinelTLS": True,
+                                              "redisCAExistingSecret": "my-ca"}})
+
+    def test_memory_without_any_password(self):
+        result = render({"connections": {"redisNoPass": False, "redisPassword": "", "redisExistingSecret": "",
+                                         "redisSentinelNodes": ["sentinel:26379"], "redisSentinelNoPass": False,
+                                         "redisSentinelPassword": "", "redisSentinelExistingSecret": ""}})
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_redis_modes_keep_env(self):
+        for values in ({"docservice": {"editorDataStorage": "standalone"}},
+                       {"docservice": {"editorDataStorage": "memory", "editorStatStorage": "standalone"}}):
+            with self.subTest(values=values):
+                _, documents = self.documents(values)
+                for name, doc in self.workloads(documents).items():
+                    self.assertIn("REDIS_SERVER_PWD", self.env_names(doc), name)
+
+    def test_redis_mode_still_requires_password(self):
+        result = render({"docservice": {"editorDataStorage": "standalone"},
+                         "connections": {"redisNoPass": False, "redisPassword": "", "redisExistingSecret": ""}})
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, "Authenticated Redis requires connections.redisPassword or connections.redisExistingSecret|A Redis Password is required!")
+
+    def test_no_whitespace_only_lines_in_memory_mode(self):
+        text, _ = self.documents({})
+        for source in ("deployments/docservice.yaml", "deployments/converter.yaml", "statefulset/adminpanel.yaml",
+                       "tests/test-ds-pod.yaml"):
+            part = text.split("# Source: docs/templates/" + source)[1].split("\n# Source:")[0]
+            blank = [n for n, line in enumerate(part.splitlines()) if line and not line.strip()]
+            self.assertFalse(blank, "%s has whitespace-only lines %s" % (source, blank))
 
 
 class RedisImageVersionGate(unittest.TestCase):
@@ -307,7 +380,7 @@ class RedisImageVersionGate(unittest.TestCase):
     def assertRejected(self, values, tag, **kwargs):
         result = self.result(values, tag, **kwargs)
         self.assertNotEqual(result.returncode, 0, result.stdout[:200])
-        self.assertIn("require DocumentServer %s or later" % self.MINIMUM, result.stderr)
+        self.assertIn("requires DocumentServer %s or later" % self.MINIMUM, result.stderr)
 
     def assertRenders(self, values, tag, **kwargs):
         result = self.result(values, tag, **kwargs)
@@ -322,11 +395,12 @@ class RedisImageVersionGate(unittest.TestCase):
         for name, values in self.STORAGE.items():
             with self.subTest(storage=name):
                 self.assertRejected(values, "v9.3.8")
-        self.assertRejected({"connections": {"redisTLS": True}}, "v9.3.8")
-        self.assertRejected({"connections": {"redisSentinelTLS": True}}, "v9.3.8")
 
     def test_old_tag_allowed_with_memory(self):
         self.assertRenders({}, "v9.3.8")
+        # TLS settings have no effect without a Redis storage mode.
+        self.assertRenders({"connections": {"redisTLS": True}}, "v9.3.8")
+        self.assertRenders({"connections": {"redisSentinelTLS": True}}, "v9.3.8")
 
     def test_new_and_prerelease_tags(self):
         for tag in ("v99.0.0", "99.0.0-rc.1", "v99.1.0", "100.0.0"):

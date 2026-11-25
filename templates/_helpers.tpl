@@ -12,6 +12,16 @@ Check the DB type
 {{- end -}}
 
 {{/*
+Whether DocService uses Redis: true when editor data or editor statistics storage is a Redis mode
+(standalone, sentinel or cluster). Uses the same defaulting as ds.editor.storage.validate.
+*/}}
+{{- define "ds.redis.enabled" -}}
+{{- $dataStorage := default "memory" .Values.docservice.editorDataStorage -}}
+{{- $statStorage := default $dataStorage .Values.docservice.editorStatStorage -}}
+{{- if or (ne $dataStorage "memory") (ne $statStorage "memory") -}}true{{- end -}}
+{{- end -}}
+
+{{/*
 Minimum DocumentServer version that supports Redis editor storage and the Redis TLS settings
 (Euro-Office/DocumentServer PR #386). Empty until that DocumentServer release is tagged; while empty the
 version gate in ds.editor.storage.validate is inactive. Set it to the released version (e.g. "X.Y.Z") when
@@ -29,7 +39,7 @@ Validate editor storage modes and their Redis topology requirements.
 {{- if and .Values.connections.redisClusterNodes .Values.connections.redisSentinelNodes -}}
   {{- fail "Redis Cluster and Redis Sentinel nodes cannot be configured together." -}}
 {{- end -}}
-{{- if and .Values.connections.redisSentinelNodes (not .Values.connections.redisSentinelNoPass) -}}
+{{- if and (eq (include "ds.redis.enabled" .) "true") .Values.connections.redisSentinelNodes (not .Values.connections.redisSentinelNoPass) -}}
   {{- if and (empty .Values.connections.redisSentinelPassword) (empty .Values.connections.redisSentinelExistingSecret) -}}
     {{- fail "Authenticated Redis Sentinel requires connections.redisSentinelPassword or connections.redisSentinelExistingSecret." -}}
   {{- end -}}
@@ -60,14 +70,14 @@ Validate editor storage modes and their Redis topology requirements.
     {{- fail "Standalone editor storage cannot be combined with Redis Cluster or Sentinel nodes." -}}
   {{- end -}}
 {{- end -}}
-{{- if and (not .Values.connections.redisNoPass) (empty .Values.connections.redisPassword) (empty .Values.connections.redisExistingSecret) -}}
+{{- if and (eq (include "ds.redis.enabled" .) "true") (not .Values.connections.redisNoPass) (empty .Values.connections.redisPassword) (empty .Values.connections.redisExistingSecret) -}}
   {{- fail "Authenticated Redis requires connections.redisPassword or connections.redisExistingSecret." -}}
 {{- end -}}
-{{- $redisWanted := or (ne $redisStorage "memory") .Values.connections.redisTLS .Values.connections.redisSentinelTLS -}}
+{{- $redisWanted := eq (include "ds.redis.enabled" .) "true" -}}
 {{- $minVersion := include "ds.redis.minImageVersion" . | trim -}}
 {{- $imageVersion := include "ds.versionGate.version" . -}}
 {{- if and $redisWanted $minVersion $imageVersion (semverCompare (printf "<%s-0" $minVersion) $imageVersion) -}}
-  {{- fail (printf "Redis editor storage and Redis TLS require DocumentServer %s or later, but the docservice image tag is %s. Use a newer image or set docservice.editorDataStorage/editorStatStorage to memory and disable connections.redisTLS/redisSentinelTLS." $minVersion (default .Values.images.tag .Values.docservice.image.tag)) -}}
+  {{- fail (printf "Redis editor storage requires DocumentServer %s or later, but the docservice image tag is %s. Use a newer image or set docservice.editorDataStorage/editorStatStorage to memory." $minVersion (default .Values.images.tag .Values.docservice.image.tag)) -}}
 {{- end -}}
 true
 {{- end -}}
@@ -202,6 +212,7 @@ Return Redis Sentinel password
 
 {{/* Render only native Redis secret variables. Users are in the ConfigMap. */}}
 {{- define "ds.redis.env" -}}
+{{- if eq (include "ds.redis.enabled" .) "true" }}
 {{- if not .Values.connections.redisNoPass }}
 - name: REDIS_SERVER_PWD
   valueFrom:
@@ -216,12 +227,13 @@ Return Redis Sentinel password
       name: {{ template "ds.redis.sentinel.secretName" . }}
       key: {{ .Values.connections.redisSentinelSecretKeyName }}
 {{- end }}
+{{- end }}
 {{- end -}}
 
-{{/* Share Redis CA trust between the application containers and the connectivity hook. */}}
+{{/* Share Redis CA trust between the application containers and the connectivity hook (only when Redis is used). */}}
 {{- define "ds.redis.ca.enabled" -}}
 {{- $tls := or .Values.connections.redisTLS .Values.connections.redisSentinelTLS -}}
-{{- if and .Values.connections.redisCAExistingSecret $tls -}}
+{{- if and (eq (include "ds.redis.enabled" .) "true") .Values.connections.redisCAExistingSecret $tls -}}
 true
 {{- end -}}
 {{- end -}}

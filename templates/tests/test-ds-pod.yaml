@@ -77,12 +77,16 @@ spec:
           name: {{ tpl .Values.connections.amqpUserExistingSecret $ }}
           key: {{ .Values.connections.amqpUserSecretKeyName }}
     {{- end }}
-    {{ include "ds.redis.env" . | nindent 4 }}
+    {{- with (include "ds.redis.env" . | trim) }}
+    {{- . | nindent 4 }}
+    {{- end }}
     - name: STORAGE_S3
       value: {{ .Values.persistence.storageS3 | quote }}
     - name: DS_ADDRESS
       value: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "docservice") }}
-    {{ include "ds.redis.ca.testEnv" . | nindent 4 }}
+    {{- with (include "ds.redis.ca.testEnv" . | trim) }}
+    {{- . | nindent 4 }}
+    {{- end }}
     {{- with .Values.tests.extraEnvVars }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -97,7 +101,9 @@ spec:
     - name: test-ds
       mountPath: /scripts/test_ds.py
       subPath: test_ds.py
-    {{ include "ds.redis.ca.mount" . | nindent 4 }}
+    {{- with (include "ds.redis.ca.mount" . | trim) }}
+    {{- . | nindent 4 }}
+    {{- end }}
     {{- with .Values.tests.extraVolumeMounts }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
@@ -112,7 +118,9 @@ spec:
     configMap:
       name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "test-ds") }}
       defaultMode: 0755
-  {{ include "ds.redis.ca.volume" . | nindent 2 }}
+  {{- with (include "ds.redis.ca.volume" . | trim) }}
+  {{- . | nindent 2 }}
+  {{- end }}
   {{- with .Values.tests.extraVolumes }}
   {{- toYaml . | nindent 2 }}
   {{- end }}

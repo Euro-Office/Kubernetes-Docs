@@ -3,6 +3,7 @@ import sys
 import subprocess
 import time
 import logging
+import uuid
 
 
 def redis_tls_options(prefix):
@@ -31,10 +32,9 @@ if os.environ.get('REDIS_CLUSTER_NODES'):
     redisClusterPort = redisClusterNodes[0].split(":")[1]
 if os.environ.get('REDIS_SENTINEL_NODES'):
     redisSentinelGroupName = os.environ.get('REDIS_SENTINEL_GROUP_NAME')
-    if os.environ.get('REDIS_SENTINEL_NODES'):
-        redisSentinelNodes = list(os.environ.get('REDIS_SENTINEL_NODES').split(" "))
-        redisSentinelNode = redisSentinelNodes[0].split(":")[0]
-        redisSentinelPort = redisSentinelNodes[0].split(":")[1]
+    redisSentinelNodes = list(os.environ.get('REDIS_SENTINEL_NODES').split(" "))
+    redisSentinelNode = redisSentinelNodes[0].split(":")[0]
+    redisSentinelPort = redisSentinelNodes[0].split(":")[1]
 
 dbType = os.environ.get('DB_TYPE')
 dbHost = os.environ.get('DB_HOST')
@@ -158,16 +158,27 @@ def get_redis_sentinel_status():
         return rc.ping()
 
 
+def redis_in_use():
+    return 'editorDataRedis' in (os.environ.get('EDITOR_DATA_STORAGE'), os.environ.get('EDITOR_STAT_STORAGE'))
+
+
 def check_redis_key():
+    # The key lives under DocService's key prefix ("ds:"), so ACL users restricted to ~ds:* can write it.
+    key = f'ds:helm-test:{uuid.uuid4().hex}'
     try:
-        rc.set('testDocsServer', 'ok')
-        test_key = rc.get('testDocsServer').decode('utf-8')
+        rc.set(key, 'ok', ex=60)
+        test_key = rc.get(key)
+        if isinstance(test_key, bytes):
+            test_key = test_key.decode('utf-8')
+        logger_test_ds.debug(f'Test key: {key}')
+        if test_key != 'ok':
+            raise ValueError(f'unexpected value read back: {test_key!r}')
         logger_test_ds.info(f'Test Key: {test_key}')
     except Exception as msg_check_redis:
         logger_test_ds.error(f'Error when trying to write a key to Redis... {msg_check_redis}\n')
         total_result['CheckRedis'] = 'Failed'
     else:
-        rc.delete('testDocsServer')
+        rc.delete(key)
         logger_test_ds.info('The test key was successfully recorded and deleted from Redis\n')
         rc.close()
         total_result['CheckRedis'] = 'Success'
@@ -383,14 +394,18 @@ def total_status():
     logger_test_ds.info('As a result of the check, the following results were obtained:')
     for key, value in total_result.items():
         logger_test_ds.info(f'{key} = {value}')
-    if any(value != 'Success' for value in total_result.values()):
+    if any(value not in ('Success', 'Skipped') for value in total_result.values()):
         sys.exit(1)
 
 
 if __name__ == '__main__':
     init_logger('test')
     logger_test_ds = logging.getLogger('test.ds')
-    check_redis()
+    if redis_in_use():
+        check_redis()
+    else:
+        logger_test_ds.info('Redis is not used by the editor storage; skipping the Redis check\n')
+        total_result['CheckRedis'] = 'Skipped'
     check_db()
     check_mq()
     if storageS3 == 'false':

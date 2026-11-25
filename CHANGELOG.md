@@ -10,7 +10,7 @@
 
 ### New Features
 
-* Added a DocumentServer version gate for Redis editor storage and Redis TLS (`ds.redis.minImageVersion` in `templates/_helpers.tpl`). It rejects known older numeric `docservice` image tags and is inactive until the minimum DocumentServer version is set
+* Added a DocumentServer version gate for Redis editor storage (`ds.redis.minImageVersion` in `templates/_helpers.tpl`). It rejects known older numeric `docservice` image tags when a Redis storage mode is selected and is inactive until the minimum DocumentServer version is set
 * Added configurable editor storage: `docservice.editorDataStorage` (`memory`, `standalone`, `sentinel` or `cluster`, default `memory`) and `docservice.editorStatStorage` (defaults to the value of `editorDataStorage`). The chart fails to render for unsupported modes and for conflicting Redis topologies
 * Added Redis and Sentinel TLS support (`connections.redisTLS`, `connections.redisSentinelTLS`) and a shared private CA bundle (`connections.redisCAExistingSecret`, `connections.redisCASecretKeyName`) mounted into the Docservice, Converter, Adminpanel and test Pods. Requires a DocumentServer image with the Redis TLS changes
 * Added password-only and named ACL user authentication for Redis and Sentinel (`connections.redisUser: ""` omits the username, new `connections.redisSentinelUser`)
@@ -25,7 +25,9 @@
 
 ### Fixes
 
-* Fixed `helm test` reporting success when a check other than `CheckDS` failed
+* Fixed `helm test` reporting success when a check other than `CheckDS` failed. Skipped checks do not fail the run
+* Memory editor storage (the default) no longer requires Redis: the Redis password env, Secrets, CA wiring and password validation are rendered only when `editorDataStorage` or `editorStatStorage` is a Redis mode. `test-ds` reports `CheckRedis` as `Skipped` otherwise
+* The `test-ds` Redis check now writes a temporary `ds:helm-test:<uuid>` key with a 60 second expiry, so ACL users restricted to `~ds:*` work
 
 ## 7.0.0
 

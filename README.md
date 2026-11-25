@@ -397,7 +397,14 @@ The `helm delete` command removes all the Kubernetes components associated with 
 
 `docservice.editorDataStorage` and `docservice.editorStatStorage` select the
 storage module for editor data and editor statistics independently. Either
-setting may use `memory` while the other uses Redis:
+setting may use `memory` while the other uses Redis.
+
+Memory mode (the default) does not use Redis: no Redis Secret or credentials
+are needed, and the chart does not pass Redis credentials or the Redis CA to
+the pods. `helm test` reports `CheckRedis` as `Skipped` in memory mode. When a
+Redis mode is selected, the Redis check writes a temporary key under the `ds:`
+prefix (with a 60 second expiry), so ACL users restricted to `~ds:*` work.
+
 
 ```yaml
 docservice:
@@ -443,18 +450,16 @@ Sentinel. Cluster and Sentinel cannot be configured together.
 #### Redis editor storage image requirement
 
 Redis editor storage needs a DocumentServer image with Redis editor storage
-support (Euro-Office/DocumentServer PR #386). The following settings depend on
-it:
-
-* `docservice.editorDataStorage` or `docservice.editorStatStorage` other than `memory`
-* `connections.redisTLS`
-* `connections.redisSentinelTLS`
+support (Euro-Office/DocumentServer PR #386) when `docservice.editorDataStorage`
+or `docservice.editorStatStorage` is not `memory`. The Redis TLS settings
+(`connections.redisTLS`, `connections.redisSentinelTLS`) only matter together
+with such a storage mode; in memory mode they have no effect.
 
 Older images ignore these settings silently: DocService starts without an
 error and keeps the editor data in memory. Once the minimum DocumentServer
 version is set in the chart at release, the chart rejects known older numeric
-`docservice` image tags (for example `v9.3.8`) when any of these settings is
-used. Non-numeric tags (`latest`, `nightly`, `dev-<sha>`) are not checked.
+`docservice` image tags (for example `v9.3.8`) when a Redis storage mode is
+selected. Non-numeric tags (`latest`, `nightly`, `dev-<sha>`) are not checked.
 
 To verify a running image (`0` means unsupported):
 

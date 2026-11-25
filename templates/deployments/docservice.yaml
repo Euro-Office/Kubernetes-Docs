@@ -163,7 +163,9 @@ spec:
         {{- with .Values.docservice.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
-        {{ include "ds.redis.ca.volume" . | nindent 8 }}
+        {{- with (include "ds.redis.ca.volume" . | trim) }}
+        {{- . | nindent 8 }}
+        {{- end }}
       terminationGracePeriodSeconds: {{ .Values.docservice.terminationGracePeriodSeconds }}
       {{- if .Values.docservice.hostAliases }}
       hostAliases: {{- toYaml .Values.docservice.hostAliases | nindent 8 }}
@@ -333,8 +335,12 @@ spec:
                 name: {{ tpl .Values.connections.amqpUserExistingSecret $ }}
                 key: {{ .Values.connections.amqpUserSecretKeyName }}
           {{- end }}
-          {{ include "ds.redis.env" . | nindent 10 }}
-          {{ include "ds.redis.ca.env" (dict "context" . "extraEnvVars" .Values.docservice.extraEnvVars) | nindent 10 }}
+          {{- with (include "ds.redis.env" . | trim) }}
+          {{- . | nindent 10 }}
+          {{- end }}
+          {{- with (include "ds.redis.ca.env" (dict "context" . "extraEnvVars" .Values.docservice.extraEnvVars) | trim) }}
+          {{- . | nindent 10 }}
+          {{- end }}
           {{- with .Values.docservice.extraEnvVars }}
           {{- toYaml . | nindent 10 }}
           {{- end }}
@@ -401,4 +407,6 @@ spec:
           {{- with .Values.docservice.extraVolumeMounts }}
           {{- toYaml . | nindent 10 }}
           {{- end }}
-          {{ include "ds.redis.ca.mount" . | nindent 10 }}
+          {{- with (include "ds.redis.ca.mount" . | trim) }}
+          {{- . | nindent 10 }}
+          {{- end }}

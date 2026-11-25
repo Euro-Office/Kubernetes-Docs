@@ -9,13 +9,82 @@ import itertools
 import os
 from pathlib import Path
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import redis
 import redis.cluster
 
 
 SCRIPT = Path(__file__).with_name("test_ds.py")
+
+
+def load_hook(env):
+    spec = importlib.util.spec_from_file_location("connectivity_hook", SCRIPT)
+    hook = importlib.util.module_from_spec(spec)
+    with patch.dict(os.environ, {"DB_PORT": "5432", **env}, clear=True):
+        spec.loader.exec_module(hook)
+        hook.logger_test_ds = Mock()
+        return hook
+
+
+class RedisUsage(unittest.TestCase):
+    def test_redis_in_use(self):
+        cases = (
+            ({"EDITOR_DATA_STORAGE": "editorDataMemory", "EDITOR_STAT_STORAGE": "editorDataMemory"}, False),
+            ({"EDITOR_DATA_STORAGE": "editorDataRedis", "EDITOR_STAT_STORAGE": "editorDataMemory"}, True),
+            ({"EDITOR_DATA_STORAGE": "editorDataMemory", "EDITOR_STAT_STORAGE": "editorDataRedis"}, True),
+            ({"EDITOR_DATA_STORAGE": "editorDataRedis", "EDITOR_STAT_STORAGE": "editorDataRedis"}, True),
+            ({}, False),
+        )
+        for env, expected in cases:
+            with self.subTest(env=env):
+                hook = load_hook(env)
+                with patch.dict(os.environ, env, clear=True):
+                    self.assertIs(hook.redis_in_use(), expected)
+
+
+class TotalStatus(unittest.TestCase):
+    def status(self, results):
+        hook = load_hook({})
+        hook.total_result.clear()
+        hook.total_result.update(results)
+        try:
+            hook.total_status()
+        except SystemExit as exit_info:
+            return exit_info.code
+        return None
+
+    def test_success_and_skipped_pass(self):
+        self.assertIsNone(self.status({"CheckRedis": "Skipped", "CheckDS": "Success", "CheckDir": "Success"}))
+
+    def test_failed_fails(self):
+        self.assertEqual(self.status({"CheckRedis": "Skipped", "CheckDS": "Failed"}), 1)
+        self.assertEqual(self.status({"CheckRedis": "Failed", "CheckDS": "Success"}), 1)
+
+    def test_unknown_value_fails(self):
+        self.assertEqual(self.status({"CheckRedis": "Unknown", "CheckDS": "Success"}), 1)
+
+
+class RedisKey(unittest.TestCase):
+    def check(self, stored):
+        hook = load_hook({})
+        hook.total_result.clear()
+        hook.rc = MagicMock()
+        hook.rc.get.return_value = stored
+        hook.check_redis_key()
+        return hook
+
+    def test_key_prefix_expiry_and_delete(self):
+        hook = self.check(b"ok")
+        key = hook.rc.set.call_args.args[0]
+        self.assertTrue(key.startswith("ds:helm-test:"))
+        self.assertEqual(hook.rc.set.call_args.kwargs["ex"], 60)
+        hook.rc.delete.assert_called_once_with(key)
+        self.assertEqual(hook.total_result["CheckRedis"], "Success")
+
+    def test_mismatch_fails(self):
+        hook = self.check(b"other")
+        self.assertEqual(hook.total_result["CheckRedis"], "Failed")
 
 
 class RedisTLSConnectivity(unittest.TestCase):
