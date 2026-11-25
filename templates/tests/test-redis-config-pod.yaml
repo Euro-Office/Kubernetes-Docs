@@ -13,7 +13,7 @@ metadata:
   annotations:
     "helm.sh/hook": test
     "helm.sh/hook-weight": "2"
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation
     {{- if or .Values.commonAnnotations .Values.tests.annotations }}
     {{- $dictValue := default .Values.commonAnnotations .Values.tests.annotations }}
     {{- include "ds.annotations.commonAnnotations" ( dict "keyName" $dictValue "context" $ ) | nindent 4 }}
@@ -24,6 +24,7 @@ spec:
   securityContext: {{- toYaml .Values.podSecurityContext.tests | nindent 4 }}
   {{- end }}
   restartPolicy: Never
+  activeDeadlineSeconds: 120
   {{- if or .Values.tests.customPodAntiAffinity .Values.tests.podAffinity .Values.tests.nodeAffinity }}
   affinity:
     {{- with .Values.tests.customPodAntiAffinity }}
@@ -65,11 +66,14 @@ spec:
     env:
     - name: COMPANY_NAME
       value: {{ .Values.product.name | quote }}
-    - name: ENTRYPOINT_CONFIG_ONLY
-      value: "true"
     - name: JWT_ENABLED
       value: "false"
-    {{ include "ds.redis.env" . | nindent 4 }}
+    {{- with (include "ds.redis.env" . | trim) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+    {{- with .Values.docservice.extraEnvVars }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
     envFrom:
     - configMapRef:
         name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "documentserver") }}
@@ -77,9 +81,19 @@ spec:
     - name: test-redis-config
       mountPath: /scripts/test_redis_config.sh
       subPath: test_redis_config.sh
+    {{- if .Values.extraConf.configMap }}
+    - name: custom-file
+      mountPath: /etc/{{ .Values.product.name }}/documentserver/{{ .Values.extraConf.filename }}
+      subPath: {{ .Values.extraConf.filename }}
+    {{- end }}
   volumes:
   - name: test-redis-config
     configMap:
       name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "test-redis-config") }}
       defaultMode: 0755
+  {{- if .Values.extraConf.configMap }}
+  - name: custom-file
+    configMap:
+      name: {{ .Values.extraConf.configMap }}
+  {{- end }}
 {{- end }}

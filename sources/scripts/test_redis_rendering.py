@@ -145,6 +145,29 @@ class RedisAuthenticationRendering(unittest.TestCase):
         documents = self.documents({"docservice": {"editorStatStorage": "standalone"}})
         self.assertTrue(any(doc["kind"] == "Pod" and doc["metadata"]["name"] == "test-redis-config" for doc in documents))
 
+    def test_configuration_hook_pod(self):
+        def pod(values):
+            documents = self.documents({"docservice": {"editorDataStorage": "standalone", **values.pop("docservice", {})}, **values})
+            return next(doc for doc in documents if doc["kind"] == "Pod" and doc["metadata"]["name"] == "test-redis-config")
+
+        default = pod({})
+        self.assertEqual(default["spec"]["activeDeadlineSeconds"], 120)
+        self.assertEqual(default["metadata"]["annotations"]["helm.sh/hook-delete-policy"], "before-hook-creation")
+        container = default["spec"]["containers"][0]
+        names = [entry["name"] for entry in container["env"]]
+        self.assertNotIn("ENTRYPOINT_CONFIG_ONLY", names)
+        self.assertNotIn("FOO", names)
+        self.assertNotIn("custom-file", [mount["name"] for mount in container["volumeMounts"]])
+        self.assertNotIn("custom-file", [volume["name"] for volume in default["spec"]["volumes"]])
+
+        custom = pod({"extraConf": {"configMap": "my-conf"},
+                      "docservice": {"extraEnvVars": [{"name": "FOO", "value": "bar"}]}})
+        container = custom["spec"]["containers"][0]
+        self.assertIn({"name": "FOO", "value": "bar"}, container["env"])
+        self.assertIn({"name": "custom-file", "mountPath": "/etc/euro-office/documentserver/local.json",
+                       "subPath": "local.json"}, container["volumeMounts"])
+        self.assertIn({"name": "custom-file", "configMap": {"name": "my-conf"}}, custom["spec"]["volumes"])
+
     def test_connectivity_hook_ca_mounts(self):
         extras = {
             "extraEnvVars": [
