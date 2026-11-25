@@ -153,7 +153,7 @@ class RedisAuthenticationRendering(unittest.TestCase):
             return next(doc for doc in documents if doc["kind"] == "Pod" and doc["metadata"]["name"] == "test-redis-config")
 
         default = pod({})
-        self.assertEqual(default["spec"]["activeDeadlineSeconds"], 120)
+        self.assertNotIn("activeDeadlineSeconds", default["spec"])
         self.assertEqual(default["metadata"]["annotations"]["helm.sh/hook-delete-policy"], "before-hook-creation")
         container = default["spec"]["containers"][0]
         names = [entry["name"] for entry in container["env"]]

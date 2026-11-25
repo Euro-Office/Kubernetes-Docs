@@ -1434,7 +1434,7 @@ $ kubectl logs -f test-ds -n <NAMESPACE>
 
 The Euro-Office Docs availability check is considered a priority, so if it fails with an error, the test is considered to be failed.
 
-When `docservice.editorDataStorage` or `docservice.editorStatStorage` selects a Redis mode, `helm test` also runs the `test-redis-config` Pod. It starts the image's entrypoint in a dry-run mode and checks that the generated configuration selects the requested storage and topology (Sentinel group and nodes, or Cluster nodes). It requires an image built from DocumentServer `dev/redis` or later and fails fast on older images, which would silently ignore the Redis storage settings. Connection, authentication and TLS problems are reported by `test-ds`.
+When `docservice.editorDataStorage` or `docservice.editorStatStorage` selects a Redis mode, `helm test` also runs the `test-redis-config` Pod. It starts the image's entrypoint in a dry-run mode and checks that the generated configuration selects the requested storage and topology (Sentinel group and nodes, or Cluster nodes). It requires a DocumentServer release with Redis editor storage support (see [Redis editor storage image requirement](#redis-editor-storage-image-requirement)) and fails fast on older images, which would silently ignore the Redis storage settings. Connection, authentication and TLS problems are reported by `test-ds`.
 
 After this, you can delete the `test-ds` Pod by running the following command:
 

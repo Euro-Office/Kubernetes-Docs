@@ -24,7 +24,6 @@ spec:
   securityContext: {{- toYaml .Values.podSecurityContext.tests | nindent 4 }}
   {{- end }}
   restartPolicy: Never
-  activeDeadlineSeconds: 120
   {{- if or .Values.tests.customPodAntiAffinity .Values.tests.podAffinity .Values.tests.nodeAffinity }}
   affinity:
     {{- with .Values.tests.customPodAntiAffinity }}
