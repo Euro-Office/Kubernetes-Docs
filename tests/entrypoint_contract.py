@@ -195,9 +195,15 @@ def main():
     parser.add_argument("--case", help="run one case by name")
     args = parser.parse_args()
 
-    entrypoint = Path(args.ds_scripts) / "orchestrated" / "docker-entrypoint.sh"
-    if not entrypoint.is_file():
-        sys.exit("entrypoint not found: %s" % entrypoint)
+    # The cases run with a temporary cwd, so relative paths must be resolved here.
+    args.chart = str(Path(args.chart).resolve())
+    ds_scripts = Path(args.ds_scripts).resolve()
+    args.ds_scripts = str(ds_scripts)
+    entrypoint = ds_scripts / "orchestrated" / "docker-entrypoint.sh"
+    for required in (entrypoint, ds_scripts / "redis-topology.sh"):
+        if not required.is_file():
+            print("DocumentServer script not found: %s" % required, file=sys.stderr)
+            sys.exit(2)
     cases = CASES
     if args.case:
         if args.case not in CASES:

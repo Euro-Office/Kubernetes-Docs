@@ -60,7 +60,6 @@ jobs:
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: 'v3.22.1'
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       # redis-py of the tests image (ghcr.io/euro-office/cluster-utils) is not known
       # from this repository: 6.4.0 is the newest 6.x that test_ds_tls.py passes with.
