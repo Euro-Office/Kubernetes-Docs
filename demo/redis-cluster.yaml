@@ -1,6 +1,16 @@
 # Redis Cluster test install: 6 nodes (3 primaries + 3 replicas) and an init Job.
 # It mirrors develop/docker-compose.redis-cluster.yml of Euro-Office/DocumentServer
-# (without TLS), adapted to Kubernetes. For QA only: no persistence, no PVCs.
+# (plain by default, TLS optional), adapted to Kubernetes. For QA only: no
+# persistence, no PVCs.
+#
+# TLS: off by default. To switch it on run `sh redis-tls.sh` (creates the Secrets
+# redis-tls and redis-ca from a test CA), then
+#   kubectl rollout restart statefulset/redis-cluster -n euro-office
+# and create the cluster again (delete the Job and apply this file; the nodes
+# start empty after the restart). The pods use TLS when the optional Secret
+# redis-tls is mounted at /tls, with the same ports. To switch it off delete the
+# Secret redis-tls, restart the StatefulSet and create the cluster again. Then add
+# my-values.redis-tls.yml to the helm install.
 #
 # Image: valkey/valkey 8.1.12-alpine. It ships redis-server and redis-cli as
 # symlinks to valkey-server and valkey-cli, so the redis-* names are used below.
@@ -91,8 +101,17 @@ spec:
         - -c
         - |
           set -eu
-          exec redis-server \
-            --bind 0.0.0.0 --protected-mode no --port 6379 \
+          # TLS mode when the optional Secret redis-tls is mounted at /tls.
+          if [ -f /tls/tls.crt ]; then
+            set -- --port 0 --tls-port 6379 \
+              --tls-cert-file /tls/tls.crt --tls-key-file /tls/tls.key --tls-ca-cert-file /tls/ca.crt \
+              --tls-auth-clients no --tls-replication yes \
+              --tls-cluster yes
+          else
+            set -- --port 6379
+          fi
+          exec redis-server "$@" \
+            --bind 0.0.0.0 --protected-mode no \
             --appendonly no --save "" --dir /data \
             --requirepass "$REDIS_PASSWORD" --masterauth "$REDIS_PASSWORD" \
             --cluster-enabled yes \
@@ -103,9 +122,17 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /data
+        - name: tls
+          mountPath: /tls
+          readOnly: true
         readinessProbe:
           exec:
-            command: ["sh", "-c", "REDISCLI_AUTH=\"$REDIS_PASSWORD\" redis-cli -h 127.0.0.1 ping | grep -q PONG"]
+            command:
+            - sh
+            - -c
+            - |
+              if [ -f /tls/tls.crt ]; then set -- --tls --cacert /tls/ca.crt; else set --; fi
+              REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli "$@" -h 127.0.0.1 ping | grep -q PONG
           initialDelaySeconds: 5
           periodSeconds: 5
         securityContext:
@@ -122,6 +149,11 @@ spec:
       volumes:
       - name: data
         emptyDir: {}
+      - name: tls
+        secret:
+          secretName: redis-tls
+          optional: true
+          defaultMode: 0440
 ---
 # Creates the cluster once. Safe to run again: it exits early if the cluster exists.
 apiVersion: batch/v1
@@ -144,6 +176,7 @@ spec:
           type: RuntimeDefault
         runAsUser: 999
         runAsGroup: 1000
+        fsGroup: 1000
       containers:
       - name: init
         image: valkey/valkey:8.1.12-alpine
@@ -162,6 +195,8 @@ spec:
         - -c
         - |
           set -eu
+          # TLS mode when the optional Secret redis-tls is mounted at /tls.
+          if [ -f /tls/tls.crt ]; then set -- --tls --cacert /tls/ca.crt; else set --; fi
           nodes=""
           for i in 0 1 2 3 4 5; do
             nodes="$nodes redis-cluster-$i.redis-cluster.$POD_NAMESPACE.svc.cluster.local:6379"
@@ -169,13 +204,13 @@ spec:
 
           # Wait until all six nodes answer.
           for n in $nodes; do
-            until [ "$(redis-cli -h "${n%:*}" -p 6379 ping 2>/dev/null || true)" = "PONG" ]; do
+            until [ "$(redis-cli "$@" -h "${n%:*}" -p 6379 ping 2>/dev/null || true)" = "PONG" ]; do
               echo "waiting for $n"
               sleep 2
             done
           done
 
-          cluster_info="$(redis-cli -h "redis-cluster-0.redis-cluster.$POD_NAMESPACE.svc.cluster.local" -p 6379 cluster info 2>/dev/null || true)"
+          cluster_info="$(redis-cli "$@" -h "redis-cluster-0.redis-cluster.$POD_NAMESPACE.svc.cluster.local" -p 6379 cluster info 2>/dev/null || true)"
           case "$cluster_info" in
             *"cluster_state:ok"*|*"cluster_slots_assigned:16384"*)
               echo "Redis cluster already exists; skipping cluster creation"
@@ -183,11 +218,15 @@ spec:
               ;;
           esac
           # shellcheck disable=SC2086
-          exec redis-cli --cluster create $nodes --cluster-replicas 1 --cluster-yes
+          exec redis-cli "$@" --cluster create $nodes --cluster-replicas 1 --cluster-yes
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
             drop: ["ALL"]
+        volumeMounts:
+        - name: tls
+          mountPath: /tls
+          readOnly: true
         resources:
           requests:
             memory: 16Mi
@@ -195,3 +234,9 @@ spec:
           limits:
             memory: 64Mi
             cpu: 100m
+      volumes:
+      - name: tls
+        secret:
+          secretName: redis-tls
+          optional: true
+          defaultMode: 0440

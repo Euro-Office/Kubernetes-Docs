@@ -291,6 +291,59 @@ Deleting a cluster pod (`kubectl delete pod`) also tests the promotion (`cluster
 recreated pod is a new empty node that does not rejoin the cluster by itself: the cluster then lists a
 failed `noaddr` node. Recreate the cluster to get back to six nodes (see Clean up).
 
+### TLS (optional)
+
+Both test installs can run with TLS (Redis nodes, Sentinels and the cluster bus) and a private CA. This
+tests `connections.redisTLS`, `connections.redisSentinelTLS` and `connections.redisCAExistingSecret`,
+including that the Converter starts without the Redis CA. It is off by default; the manifests switch to TLS
+when the optional Secret `redis-tls` exists, with the same ports.
+
+```bash
+# 1. Test CA and server certificate; creates the Secrets redis-tls (for the Redis pods) and redis-ca (for the chart)
+sh redis-tls.sh euro-office
+
+# 2. Restart the Redis pods so that they start in TLS mode
+kubectl rollout restart statefulset/redis-node statefulset/redis-sentinel -n euro-office      # Sentinel
+kubectl rollout restart statefulset/redis-cluster -n euro-office                                # Cluster:
+kubectl delete job/redis-cluster-init -n euro-office --ignore-not-found && kubectl apply -f redis-cluster.yaml   # create it again
+
+# 3. Install with the topology overlay and then the TLS overlay
+helm install docs .. -n euro-office -f my-values.yml -f my-values.redis-sentinel.yml -f my-values.redis-tls.yml --timeout 10m
+# Cluster: -f my-values.redis-cluster.yml instead of the Sentinel overlay
+```
+
+Checks:
+
+```bash
+# Plain connections are refused, TLS works
+kubectl exec -n euro-office redis-sentinel-0 -- redis-cli -p 26379 ping                                  # error / connection reset
+kubectl exec -n euro-office redis-sentinel-0 -- redis-cli --tls --cacert /tls/ca.crt -p 26379 SENTINEL get-master-addr-by-name mymaster
+kubectl exec -n euro-office redis-cluster-0 -- sh -c 'REDISCLI_AUTH=redis redis-cli --tls --cacert /tls/ca.crt CLUSTER INFO' | grep cluster_state
+
+# The CA reaches the Pods that use Redis, but not the Converter (the test Pod exists only while `helm test` runs)
+for w in deploy/docservice statefulset/adminpanel; do
+  kubectl exec -n euro-office $w -- printenv NODE_EXTRA_CA_CERTS      # /etc/redis-ca-certificates/ca.crt
+done
+kubectl get pod/test-ds -n euro-office -o yaml | grep -A1 _CA_CERTS    # the test Pod: REDIS_SERVER_CA_CERTS (and REDIS_SENTINEL_CA_CERTS)
+kubectl get deploy/converter -n euro-office -o yaml | grep -c NODE_EXTRA_CA_CERTS     # 0, and the Converter is Ready
+helm test docs -n euro-office
+```
+
+The failover tests above work the same way with TLS: add `--tls --cacert /tls/ca.crt` to the `redis-cli`
+commands (and `redis-cli` needs no extra options for the Sentinel password, which is empty by default).
+
+Negative test: install with the TLS overlay but without the CA, for example with
+`--set connections.redisCAExistingSecret=`. The chart renders (the default trust store is used), but the
+test CA is unknown: DocService and `helm test` cannot connect to Redis and report
+`SELF_SIGNED_CERT_IN_CHAIN`. Install again with `redisCAExistingSecret: redis-ca` to fix it.
+
+To go back to plain Redis: delete the Secrets, restart the StatefulSets as above (and create the cluster
+again), and install without `my-values.redis-tls.yml`:
+
+```bash
+kubectl delete secret redis-tls redis-ca -n euro-office
+```
+
 ### Clean up
 
 ```bash
@@ -346,6 +399,8 @@ sudo rm -rf /tmp/euro-office-shared
 - `my-values.redis-standalone.yml` — enables Redis for both editor data and statistics using standalone Redis
 - `my-values.redis-data-only.yml` — enables Redis for editor data while keeping statistics in memory
 - `my-values.redis-sentinel.yml` — Sentinel configuration overlay for the test Sentinel in `redis-sentinel.yaml` (or any reachable Redis Sentinel deployment)
+- `redis-tls.sh` — creates a test CA and the Secrets `redis-tls` and `redis-ca` for the optional TLS mode of the Sentinel and Cluster test installs
+- `my-values.redis-tls.yml` — TLS overlay (after a Sentinel or Cluster overlay)
 - `my-values.redis-cluster.yml` — Cluster configuration overlay for the test cluster in `redis-cluster.yaml` (or any reachable Redis Cluster deployment)
 
 ## Limitations

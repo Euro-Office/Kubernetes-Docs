@@ -1,6 +1,14 @@
 # Redis Sentinel test install: 2 Redis nodes (primary + replica) and 3 Sentinels.
 # It mirrors develop/docker-compose.redis-sentinel.yml of Euro-Office/DocumentServer
-# (without TLS), adapted to Kubernetes. For QA only: no persistence, no PVCs.
+# (plain by default, TLS optional), adapted to Kubernetes. For QA only: no
+# persistence, no PVCs.
+#
+# TLS: off by default. To switch it on run `sh redis-tls.sh` (creates the Secrets
+# redis-tls and redis-ca from a test CA), then
+#   kubectl rollout restart statefulset/redis-node statefulset/redis-sentinel -n euro-office
+# The pods use TLS when the optional Secret redis-tls is mounted at /tls, with the
+# same ports. To switch it off delete the Secret redis-tls and restart the
+# StatefulSets. Then add my-values.redis-tls.yml to the helm install.
 #
 # Image: valkey/valkey 8.1.12-alpine. It ships redis-server and redis-cli as
 # symlinks to valkey-server and valkey-cli, so the redis-* names are used below.
@@ -99,13 +107,19 @@ spec:
           fqdn="$HOSTNAME.redis-node.$ns.svc.cluster.local"
           ordinal="${HOSTNAME##*-}"
 
+          # TLS mode when the optional Secret redis-tls is mounted at /tls.
+          tls=""
+          if [ -f /tls/tls.crt ]; then tls=1; fi
+          cli() {
+            if [ -n "$tls" ]; then timeout 3 redis-cli --tls --cacert /tls/ca.crt "$@"; else timeout 3 redis-cli "$@"; fi
+          }
+
           # Ask one Sentinel for the current primary. Prints the host, or nothing.
           ask_sentinel() {
             if [ -n "$SENTINEL_PASSWORD" ]; then
-              REDISCLI_AUTH="$SENTINEL_PASSWORD" timeout 3 redis-cli \
-                -h "$1" -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -n 1
+              (export REDISCLI_AUTH="$SENTINEL_PASSWORD"; cli -h "$1" -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -n 1)
             else
-              timeout 3 redis-cli -h "$1" -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -n 1
+              cli -h "$1" -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -n 1
             fi
           }
 
@@ -130,17 +144,32 @@ spec:
             echo "starting $fqdn as replica of $primary"
             set -- --replicaof "$primary" 6379
           fi
+          if [ -n "$tls" ]; then
+            set -- "$@" --port 0 --tls-port 6379 \
+              --tls-cert-file /tls/tls.crt --tls-key-file /tls/tls.key --tls-ca-cert-file /tls/ca.crt \
+              --tls-auth-clients no --tls-replication yes
+          else
+            set -- "$@" --port 6379
+          fi
           exec redis-server "$@" \
-            --bind 0.0.0.0 --protected-mode no --port 6379 \
+            --bind 0.0.0.0 --protected-mode no \
             --appendonly no --save "" --dir /data \
             --requirepass "$REDIS_PASSWORD" --masterauth "$REDIS_PASSWORD" \
             --replica-announce-ip "$fqdn"
         volumeMounts:
         - name: data
           mountPath: /data
+        - name: tls
+          mountPath: /tls
+          readOnly: true
         readinessProbe:
           exec:
-            command: ["sh", "-c", "REDISCLI_AUTH=\"$REDIS_PASSWORD\" redis-cli -h 127.0.0.1 ping | grep -q PONG"]
+            command:
+            - sh
+            - -c
+            - |
+              if [ -f /tls/tls.crt ]; then set -- --tls --cacert /tls/ca.crt; else set --; fi
+              REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli "$@" -h 127.0.0.1 ping | grep -q PONG
           initialDelaySeconds: 5
           periodSeconds: 5
         securityContext:
@@ -157,6 +186,11 @@ spec:
       volumes:
       - name: data
         emptyDir: {}
+      - name: tls
+        secret:
+          secretName: redis-tls
+          optional: true
+          defaultMode: 0440
 ---
 # Headless Service of the Sentinels.
 apiVersion: v1
@@ -233,14 +267,20 @@ spec:
           fqdn="$HOSTNAME.redis-sentinel.$ns.svc.cluster.local"
           conf=/data/sentinel.conf
 
+          # TLS mode when the optional Secret redis-tls is mounted at /tls.
+          tls=""
+          if [ -f /tls/tls.crt ]; then tls=1; fi
+          cli() {
+            if [ -n "$tls" ]; then timeout 3 redis-cli --tls --cacert /tls/ca.crt "$@"; else timeout 3 redis-cli "$@"; fi
+          }
+
           # Ask another Sentinel for the current primary (used when this pod restarts
           # after a failover). Prints the host, or nothing.
           ask_sentinel() {
             if [ -n "$SENTINEL_PASSWORD" ]; then
-              REDISCLI_AUTH="$SENTINEL_PASSWORD" timeout 3 redis-cli \
-                -h "$1" -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -n 1
+              (export REDISCLI_AUTH="$SENTINEL_PASSWORD"; cli -h "$1" -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -n 1)
             else
-              timeout 3 redis-cli -h "$1" -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -n 1
+              cli -h "$1" -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -n 1
             fi
           }
 
@@ -255,7 +295,17 @@ spec:
 
           # Sentinel rewrites its configuration file, so it lives in a writable volume.
           {
-            echo "port 26379"
+            if [ -n "$tls" ]; then
+              echo "port 0"
+              echo "tls-port 26379"
+              echo "tls-cert-file /tls/tls.crt"
+              echo "tls-key-file /tls/tls.key"
+              echo "tls-ca-cert-file /tls/ca.crt"
+              echo "tls-auth-clients no"
+              echo "tls-replication yes"
+            else
+              echo "port 26379"
+            fi
             echo "bind 0.0.0.0"
             echo "protected-mode no"
             echo "dir /data"
@@ -288,6 +338,9 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /data
+        - name: tls
+          mountPath: /tls
+          readOnly: true
         readinessProbe:
           exec:
             command:
@@ -295,7 +348,8 @@ spec:
             - -c
             - |
               if [ -n "$SENTINEL_PASSWORD" ]; then export REDISCLI_AUTH="$SENTINEL_PASSWORD"; fi
-              redis-cli -h 127.0.0.1 -p 26379 SENTINEL get-master-addr-by-name mymaster | grep -q .
+              if [ -f /tls/tls.crt ]; then set -- --tls --cacert /tls/ca.crt; else set --; fi
+              redis-cli "$@" -h 127.0.0.1 -p 26379 SENTINEL get-master-addr-by-name mymaster | grep -q .
           initialDelaySeconds: 5
           periodSeconds: 5
         securityContext:
@@ -312,3 +366,8 @@ spec:
       volumes:
       - name: data
         emptyDir: {}
+      - name: tls
+        secret:
+          secretName: redis-tls
+          optional: true
+          defaultMode: 0440

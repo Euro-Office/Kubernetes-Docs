@@ -1,0 +1,17 @@
+# TLS for the demo Redis Sentinel or Redis Cluster test install.
+# Apply AFTER my-values.yml and one topology overlay, once `sh redis-tls.sh` has
+# created the Secrets and the Redis pods run in TLS mode (see Readme.md):
+#
+# helm install docs .. -n euro-office -f my-values.yml -f my-values.redis-sentinel.yml -f my-values.redis-tls.yml
+# helm install docs .. -n euro-office -f my-values.yml -f my-values.redis-cluster.yml -f my-values.redis-tls.yml
+
+connections:
+  # TLS to the Redis data nodes (Sentinel-discovered nodes and Cluster nodes).
+  redisTLS: true
+  # TLS to the Sentinels. Used only with my-values.redis-sentinel.yml: it has no
+  # effect with the Cluster overlay.
+  redisSentinelTLS: true
+  # Secret redis-ca (key ca.crt, the chart default redisCASecretKeyName) holds the
+  # test CA. The chart trusts it in DocService, AdminPanel and the test Pods
+  # (NODE_EXTRA_CA_CERTS); the Converter does not use Redis and gets neither.
+  redisCAExistingSecret: redis-ca

@@ -19,6 +19,7 @@
 * Added `tests.extraEnvVars`, `tests.extraVolumes` and `tests.extraVolumeMounts` for the test Pod
 * Added example values files `demo/my-values.redis-standalone.yml`, `demo/my-values.redis-data-only.yml`, `demo/my-values.redis-sentinel.yml` and `demo/my-values.redis-cluster.yml`, and a `test-redis-config` test (`test_redis_config.sh`). `helm test` runs it for any Redis-backed storage mode: it checks that the DocService image selects the requested storage and topology, and fails fast on images without Redis storage support. Connectivity, authentication and TLS are checked by `test-ds`
 * Added demo manifests `demo/redis-sentinel.yaml` and `demo/redis-cluster.yaml` (Valkey, without TLS) for testing the Sentinel and Cluster editor storage modes and failover; the Sentinel and Cluster values files now point to them
+* Added optional TLS to the demo Sentinel and Cluster test installs: `demo/redis-tls.sh` creates a test CA and the Secrets `redis-tls` and `redis-ca`, the manifests switch to TLS when `redis-tls` exists, and `demo/my-values.redis-tls.yml` enables `redisTLS`, `redisSentinelTLS` and `redisCAExistingSecret`
 
 ### Changes
 
