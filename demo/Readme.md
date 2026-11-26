@@ -311,9 +311,9 @@ kubectl exec -n euro-office redis-cluster-0 -- sh -c 'REDISCLI_AUTH=redis redis-
 ```
 
 This proves that the application survives a node restart and that the node rejoins with its identity. It does
-not prove a promotion: the container restarts within about 10 s, which can be before the replicas of the
+not prove a promotion: the container restarts quickly, which can be before the replicas of the
 primary (`--cluster-node-timeout 5000`) have promoted one of them, and then the same node is a primary
-again (on a test cluster, the roles did not change). Use the `CLUSTER FAILOVER` test above to test the promotion.
+again. Use the `CLUSTER FAILOVER` test above to test the promotion.
 
 Deleting a cluster pod (`kubectl delete pod`) also tests the promotion (`cluster_state:ok` again), but the
 recreated pod is a new empty node that does not rejoin the cluster by itself: the cluster then lists a
