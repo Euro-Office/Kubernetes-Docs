@@ -4,8 +4,8 @@
 
 ### Breaking Changes
 
-* Release requirement: chart 8.0.0 must be released together with the first DocumentServer release containing Redis editor storage support; set `appVersion`, `images.tag` and `ds.redis.minImageVersion` to that version
-* Removed the `connections.redisConnectorName` parameter (the `ioredis` switch for Redis Sentinel). Sentinel mode is now enabled when `connections.redisSentinelNodes` is not empty, and Redis Cluster mode when `connections.redisClusterNodes` is not empty. Remove `redisConnectorName` from your values files. Setting it to `ioredis` (or any value other than `redis`) now fails the install/upgrade with a migration message; `redis` is ignored with a notice
+* Redis editor storage (`docservice.editorDataStorage`, `docservice.editorStatStorage`) and Redis TLS (`connections.redisTLS`, `connections.redisSentinelTLS`) require a DocumentServer release with Redis editor storage support (entrypoint and server). Older images ignore these settings. The chart rejects images older than the minimum supported version once that version is set
+* Removed the `connections.redisConnectorName` parameter (the `ioredis` switch for Redis Sentinel). Redis Sentinel is now used when `docservice.editorDataStorage` or `docservice.editorStatStorage` is `sentinel` and `connections.redisSentinelNodes` is set, and Redis Cluster when it is `cluster` and `connections.redisClusterNodes` is set; the nodes alone do nothing in memory mode. Remove `redisConnectorName` from your values files. Setting it to `ioredis` (or any value other than `redis`) now fails the install/upgrade with a migration message; `redis` is ignored with a notice
 * `REDIS_SENTINEL_PWD` is now rendered only if `connections.redisSentinelNodes` is set and `connections.redisSentinelNoPass` is `false` (the default is `true`), and `REDIS_SERVER_PWD` is no longer rendered if `connections.redisNoPass` is `true`. Users who set `redisConnectorName: ioredis` with an authenticated Sentinel must set `connections.redisSentinelNodes`, `connections.redisSentinelGroupName` and `connections.redisSentinelNoPass: false`
 
 ### New Features
@@ -37,6 +37,8 @@
 * Fixed `helm test` reporting success when a check other than `CheckDS` failed. Skipped checks do not fail the run
 * Memory editor storage (the default) no longer requires Redis: the Redis password env, Secrets, CA wiring and password validation are rendered only when `editorDataStorage` or `editorStatStorage` is a Redis mode. `test-ds` reports `CheckRedis` as `Skipped` otherwise
 * The `test-ds` Redis check now writes a temporary `ds:helm-test:<uuid>` key with a 60 second expiry, so ACL users restricted to `~ds:*` work
+* `test-ds` now uses all configured Sentinel nodes and all Cluster nodes instead of only the first one, so `helm test` no longer fails when that node is down
+* The post-install notes show the log command of the `test-redis-config` test Pod when Redis editor storage is used
 
 ## 7.0.0
 
