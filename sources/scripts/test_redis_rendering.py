@@ -834,5 +834,50 @@ class UnusedRedisConfigMapKeys(unittest.TestCase):
         self.assertEqual(self.config("sentinel", redisSentinelTLS=True)["REDIS_SENTINEL_TLS"], "true")
 
 
+class RedisTestHookNotes(unittest.TestCase):
+    """NOTES.txt mentions the test-redis-config hook only when the hook is rendered."""
+
+    def notes(self, values, suffix=None):
+        values = {**values, **({"commonNameSuffix": suffix} if suffix else {})}
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as overrides:
+            json.dump(values, overrides)
+            overrides.flush()
+            result = subprocess.run(
+                ["helm", "install", "notes-test", str(CHART), "--dry-run=client", "-f", overrides.name],
+                text=True, capture_output=True, check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.split("NOTES:", 1)[1]
+
+    def test_redis_modes_mention_the_hook(self):
+        for mode, connections in (("standalone", {"redisPassword": "x"}),
+                                  ("sentinel", {"redisPassword": "x", "redisSentinelNodes": ["s:26379"]}),
+                                  ("cluster", {"redisPassword": "x", "redisClusterNodes": ["c:6379"]})):
+            with self.subTest(mode=mode):
+                notes = self.notes({"docservice": {"editorDataStorage": mode}, "connections": connections})
+                self.assertIn("kubectl logs -f test-redis-config --namespace=", notes)
+                self.assertIn("kubectl logs -f test-ds --namespace=", notes)
+
+    def test_statistics_only_redis_mentions_the_hook(self):
+        notes = self.notes({"docservice": {"editorStatStorage": "standalone"}, "connections": {"redisPassword": "x"}})
+        self.assertIn("test-redis-config", notes)
+
+    def test_name_suffix_is_used(self):
+        notes = self.notes({"docservice": {"editorDataStorage": "standalone"}, "connections": {"redisPassword": "x"}},
+                           suffix="-sfx")
+        self.assertRegex(notes, r"kubectl logs -f test-redis-config\S* --namespace=")
+
+    def test_memory_mode_does_not_mention_it(self):
+        notes = self.notes({})
+        self.assertIn("kubectl logs -f test-ds --namespace=", notes)
+        self.assertNotIn("test-redis-config", notes)
+
+    def test_disabled_tests_do_not_mention_it(self):
+        notes = self.notes({"tests": {"enabled": False}, "docservice": {"editorDataStorage": "standalone"},
+                            "connections": {"redisPassword": "x"}})
+        self.assertNotIn("test-redis-config", notes)
+        self.assertNotIn("Helm test", notes)
+
+
 if __name__ == "__main__":
     unittest.main()
