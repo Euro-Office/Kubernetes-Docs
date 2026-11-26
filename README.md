@@ -491,6 +491,13 @@ kubectl -n <NS> exec deploy/docservice -c docservice -- \
 
 `helm test` (`test-redis-config`) also fails fast on unsupported images.
 
+#### Redis test installs
+
+For trying the Redis modes and failover, `demo/` contains test manifests for
+standalone Redis, Redis Sentinel (`redis-sentinel.yaml`) and Redis Cluster
+(`redis-cluster.yaml`), with matching values overlays. They are for testing only
+(no persistence, no TLS). See [demo/Readme.md](demo/Readme.md).
+
 #### Redis TLS
 
 `connections.redisTLS` enables TLS for standalone Redis, Cluster connections,
@@ -536,8 +543,9 @@ Create `redis-ca` in the release namespace, for example:
 kubectl create secret generic redis-ca --from-file=ca.crt=./ca-bundle.pem --namespace <release-namespace>
 ```
 
-The chart mounts this same bundle read-only into Docservice, Converter,
-Adminpanel (when enabled), and the dependency connectivity test pod. No extra
+The chart mounts this same bundle read-only into Docservice, Adminpanel
+(when enabled), and the dependency connectivity test pod. The Converter does not
+use Redis and receives neither the bundle nor any Redis credentials. No extra
 volume or environment configuration is needed. If Redis and Sentinel use
 different CAs, include both issuers in the bundle. The shared configuration is
 active when either TLS flag is enabled; without it, the existing trust defaults

@@ -18,6 +18,7 @@
 * Added password-only and named ACL user authentication for Redis and Sentinel (`connections.redisUser: ""` omits the username, new `connections.redisSentinelUser`)
 * Added `tests.extraEnvVars`, `tests.extraVolumes` and `tests.extraVolumeMounts` for the test Pod
 * Added example values files `demo/my-values.redis-standalone.yml`, `demo/my-values.redis-data-only.yml`, `demo/my-values.redis-sentinel.yml` and `demo/my-values.redis-cluster.yml`, and a `test-redis-config` test (`test_redis_config.sh`). `helm test` runs it for any Redis-backed storage mode: it checks that the DocService image selects the requested storage and topology, and fails fast on images without Redis storage support. Connectivity, authentication and TLS are checked by `test-ds`
+* Added demo manifests `demo/redis-sentinel.yaml` and `demo/redis-cluster.yaml` (Valkey, without TLS) for testing the Sentinel and Cluster editor storage modes and failover; the Sentinel and Cluster values files now point to them
 
 ### Changes
 

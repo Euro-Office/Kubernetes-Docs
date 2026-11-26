@@ -1,5 +1,5 @@
-# Apply together with my-values.yml after providing a reachable Redis Cluster
-# deployment. This file does not deploy a Redis Cluster itself.
+# Apply together with my-values.yml after deploying the test Redis Cluster with
+# `kubectl apply -f redis-cluster.yaml` (6 nodes + an init Job, see Readme.md).
 #
 # helm install docs .. -n euro-office -f my-values.yml -f my-values.redis-cluster.yml
 
@@ -8,9 +8,20 @@ docservice:
   editorStatStorage: cluster
 
 connections:
+  # All six pods of redis-cluster.yaml (StatefulSet redis-cluster, headless Service
+  # redis-cluster, namespace euro-office). Which pods are primaries changes after a
+  # failover, so all six are listed: the client needs any one reachable seed node.
   redisClusterNodes:
-    - redis-cluster-0.euro-office.svc.cluster.local:6379
-    - redis-cluster-1.euro-office.svc.cluster.local:6379
-    - redis-cluster-2.euro-office.svc.cluster.local:6379
+    - redis-cluster-0.redis-cluster.euro-office.svc.cluster.local:6379
+    - redis-cluster-1.redis-cluster.euro-office.svc.cluster.local:6379
+    - redis-cluster-2.redis-cluster.euro-office.svc.cluster.local:6379
+    - redis-cluster-3.redis-cluster.euro-office.svc.cluster.local:6379
+    - redis-cluster-4.redis-cluster.euro-office.svc.cluster.local:6379
+    - redis-cluster-5.redis-cluster.euro-office.svc.cluster.local:6379
+  # Password of the nodes, from the Secret created by redis-cluster.yaml.
+  # my-values.yml sets redisPassword, which has priority over the Secret: clear it.
+  redisPassword: ""
+  redisExistingSecret: redis-cluster-auth
+  redisSecretKeyName: redis-password
   # Redis Cluster does not support selecting a non-zero logical database.
   redisDBNum: "0"

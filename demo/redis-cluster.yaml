@@ -1,0 +1,197 @@
+# Redis Cluster test install: 6 nodes (3 primaries + 3 replicas) and an init Job.
+# It mirrors develop/docker-compose.redis-cluster.yml of Euro-Office/DocumentServer
+# (without TLS), adapted to Kubernetes. For QA only: no persistence, no PVCs.
+#
+# Image: valkey/valkey 8.1.12-alpine. It ships redis-server and redis-cli as
+# symlinks to valkey-server and valkey-cli, so the redis-* names are used below.
+# redis:7.4-alpine works as a drop-in replacement (same flags): change the two
+# `image:` lines, nothing else.
+#
+# The data directory is an emptyDir: a container restart keeps the node identity
+# (nodes.conf), but a deleted pod comes back as a new, empty node that is not part
+# of the cluster. To test failover without that, stop the redis process instead of
+# deleting the pod (see demo/Readme.md).
+#
+# Use with: helm install ... -f my-values.yml -f my-values.redis-cluster.yml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-cluster-auth
+  namespace: euro-office
+type: Opaque
+stringData:
+  # Password of all nodes (requirepass / masterauth).
+  redis-password: redis
+---
+# Headless Service. publishNotReadyAddresses lets the nodes and the init Job
+# resolve each other before the nodes are Ready.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cluster
+  namespace: euro-office
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: redis-cluster
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+  - name: bus
+    port: 16379
+    targetPort: 16379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-cluster
+  namespace: euro-office
+spec:
+  serviceName: redis-cluster
+  replicas: 6
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: redis-cluster
+  template:
+    metadata:
+      labels:
+        app: redis-cluster
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: redis
+        image: valkey/valkey:8.1.12-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        - containerPort: 16379
+          name: bus
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-cluster-auth
+              key: redis-password
+        command:
+        - sh
+        - -c
+        - |
+          set -eu
+          exec redis-server \
+            --bind 0.0.0.0 --protected-mode no --port 6379 \
+            --appendonly no --save "" --dir /data \
+            --requirepass "$REDIS_PASSWORD" --masterauth "$REDIS_PASSWORD" \
+            --cluster-enabled yes \
+            --cluster-config-file nodes.conf \
+            --cluster-node-timeout 5000 \
+            --cluster-announce-hostname "$HOSTNAME.redis-cluster.$POD_NAMESPACE.svc.cluster.local" \
+            --cluster-preferred-endpoint-type hostname
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        readinessProbe:
+          exec:
+            command: ["sh", "-c", "REDISCLI_AUTH=\"$REDIS_PASSWORD\" redis-cli -h 127.0.0.1 ping | grep -q PONG"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 50m
+          limits:
+            memory: 256Mi
+            cpu: 500m
+      volumes:
+      - name: data
+        emptyDir: {}
+---
+# Creates the cluster once. Safe to run again: it exits early if the cluster exists.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redis-cluster-init
+  namespace: euro-office
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: redis-cluster-init
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 999
+        runAsGroup: 1000
+      containers:
+      - name: init
+        image: valkey/valkey:8.1.12-alpine
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: REDISCLI_AUTH
+          valueFrom:
+            secretKeyRef:
+              name: redis-cluster-auth
+              key: redis-password
+        command:
+        - sh
+        - -c
+        - |
+          set -eu
+          nodes=""
+          for i in 0 1 2 3 4 5; do
+            nodes="$nodes redis-cluster-$i.redis-cluster.$POD_NAMESPACE.svc.cluster.local:6379"
+          done
+
+          # Wait until all six nodes answer.
+          for n in $nodes; do
+            until [ "$(redis-cli -h "${n%:*}" -p 6379 ping 2>/dev/null || true)" = "PONG" ]; do
+              echo "waiting for $n"
+              sleep 2
+            done
+          done
+
+          cluster_info="$(redis-cli -h "redis-cluster-0.redis-cluster.$POD_NAMESPACE.svc.cluster.local" -p 6379 cluster info 2>/dev/null || true)"
+          case "$cluster_info" in
+            *"cluster_state:ok"*|*"cluster_slots_assigned:16384"*)
+              echo "Redis cluster already exists; skipping cluster creation"
+              exit 0
+              ;;
+          esac
+          # shellcheck disable=SC2086
+          exec redis-cli --cluster create $nodes --cluster-replicas 1 --cluster-yes
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            memory: 16Mi
+            cpu: 10m
+          limits:
+            memory: 64Mi
+            cpu: 100m

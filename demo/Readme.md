@@ -168,6 +168,136 @@ kubectl rollout restart deployment/docservice deployment/converter -n euro-offic
 kubectl delete pod example-0 -n euro-office
 ```
 
+## Redis editor-storage examples
+
+The base `my-values.yml` leaves both editor stores in their default `memory`
+mode. Apply one of the overlays together with the base values file to select a
+Redis topology. Only one Redis topology may be configured at a time.
+
+The standalone overlay works with the `redis.yaml` manifest included here:
+
+```bash
+helm install docs .. -n euro-office \
+  -f my-values.yml -f my-values.redis-standalone.yml --timeout 10m
+```
+
+The data-only overlay demonstrates that the two storage modules can be chosen
+independently:
+
+```bash
+helm install docs .. -n euro-office \
+  -f my-values.yml -f my-values.redis-data-only.yml --timeout 10m
+```
+
+The Sentinel and Cluster overlays use the pod names of the test manifests
+`redis-sentinel.yaml` and `redis-cluster.yaml`; see the next section. To use your
+own Sentinel or Cluster, edit the node names in the overlay.
+
+## Redis Sentinel and Cluster test installs
+
+`redis.yaml` deploys a single Redis, which is enough for the standalone mode.
+To test the `sentinel` and `cluster` editor storage modes, including failover, deploy one of these
+instead (they are for QA only: no persistence; the images are `valkey/valkey:8.1.12-alpine`,
+`redis:7.4-alpine` works as a drop-in replacement). Run **one** topology at a time together with
+the dependencies from [Deploy dependencies](#deploy-dependencies), but without `redis.yaml`.
+The pods meet the Kubernetes "restricted" Pod Security Standard (non-root uid 999, no privilege escalation, all capabilities dropped, `RuntimeDefault` seccomp).
+
+### Sentinel (2 Redis nodes, 3 Sentinels)
+
+```bash
+# Recommended pre-check (validates against the cluster's API and admission, including Pod Security)
+kubectl -n euro-office apply --dry-run=server -f redis-sentinel.yaml
+kubectl apply -f redis-sentinel.yaml
+kubectl rollout status statefulset/redis-node statefulset/redis-sentinel -n euro-office --timeout=3m
+
+helm install docs .. -n euro-office -f my-values.yml -f my-values.redis-sentinel.yml --timeout 10m
+```
+
+Checks (the Sentinels run without authentication by default):
+
+```bash
+# Every Sentinel must name the same primary
+for i in 0 1 2; do
+  kubectl exec -n euro-office redis-sentinel-$i -- \
+    redis-cli -p 26379 SENTINEL get-master-addr-by-name mymaster
+done
+kubectl exec -n euro-office redis-sentinel-0 -- redis-cli -p 26379 SENTINEL ckquorum mymaster
+```
+
+Failover test:
+
+```bash
+# 1. Delete the pod that is the primary (here redis-node-0)
+kubectl delete pod redis-node-0 -n euro-office
+# 2. Within ~10 s the Sentinels promote the other node: the command below must now print redis-node-1
+kubectl exec -n euro-office redis-sentinel-0 -- redis-cli -p 26379 SENTINEL get-master-addr-by-name mymaster
+# 3. The deleted pod comes back as a replica of the new primary, never as a second primary
+kubectl exec -n euro-office redis-node-0 -- sh -c 'REDISCLI_AUTH=redis redis-cli INFO replication' | grep -E 'role|master_host|master_link_status'
+```
+
+Document editing must keep working during and after the failover.
+
+**Sentinel authentication.** Set `sentinel-password` (letters and digits only) in the Secret
+`redis-sentinel-auth` and, for a named ACL user, `sentinel-user` as well. The user can only do what a
+Sentinel client needs (authenticate, `SENTINEL get-master-addr-by-name|sentinels|master|replicas`,
+`CLIENT SETNAME`, `PING`, subscribe). Then restart the Sentinels and the nodes, and upgrade the
+release with the lines described in the comments of `my-values.redis-sentinel.yml`:
+
+```bash
+kubectl edit secret redis-sentinel-auth -n euro-office     # or re-apply the file after editing stringData
+kubectl rollout restart statefulset/redis-sentinel statefulset/redis-node -n euro-office
+helm upgrade docs .. -n euro-office -f my-values.yml -f my-values.redis-sentinel.yml \
+  --set connections.redisSentinelNoPass=false \
+  --set connections.redisSentinelUser=<sentinel-user> \
+  --set connections.redisSentinelExistingSecret=redis-sentinel-auth \
+  --set connections.redisSentinelSecretKeyName=sentinel-password
+# password only, without a named user: omit redisSentinelUser
+# check with: redis-cli --user <sentinel-user> -a <sentinel-password> -p 26379 SENTINEL get-master-addr-by-name mymaster
+```
+
+### Cluster (6 nodes: 3 primaries, 3 replicas)
+
+```bash
+# Recommended pre-check (validates against the cluster's API and admission, including Pod Security)
+kubectl -n euro-office apply --dry-run=server -f redis-cluster.yaml
+kubectl apply -f redis-cluster.yaml
+kubectl wait --for=condition=complete job/redis-cluster-init -n euro-office --timeout=3m
+
+helm install docs .. -n euro-office -f my-values.yml -f my-values.redis-cluster.yml --timeout 10m
+```
+
+Checks:
+
+```bash
+kubectl exec -n euro-office redis-cluster-0 -- sh -c 'REDISCLI_AUTH=redis redis-cli CLUSTER INFO' | grep -E 'cluster_state|cluster_slots_ok|cluster_known_nodes'
+kubectl exec -n euro-office redis-cluster-0 -- sh -c 'REDISCLI_AUTH=redis redis-cli CLUSTER NODES'
+```
+
+Expected: `cluster_state:ok`, `cluster_slots_ok:16384`, `cluster_known_nodes:6`, three `master` and three `slave` lines.
+
+Failover test. The data directory is an `emptyDir`, so stop the `redis-server` process (the container
+restarts and keeps its node identity) instead of deleting the pod:
+
+```bash
+# 1. Pick a primary from CLUSTER NODES (here redis-cluster-1) and stop its server
+kubectl exec -n euro-office redis-cluster-1 -- sh -c 'REDISCLI_AUTH=redis redis-cli SHUTDOWN NOSAVE'
+# 2. Within ~15 s its replica is promoted and the cluster is healthy again
+kubectl exec -n euro-office redis-cluster-0 -- sh -c 'REDISCLI_AUTH=redis redis-cli CLUSTER INFO' | grep cluster_state
+# 3. The restarted node rejoins as a replica of the promoted node
+kubectl exec -n euro-office redis-cluster-0 -- sh -c 'REDISCLI_AUTH=redis redis-cli CLUSTER NODES'
+```
+
+Deleting a cluster pod (`kubectl delete pod`) also tests the promotion (`cluster_state:ok` again), but the
+recreated pod is a new empty node that does not rejoin the cluster by itself: the cluster then lists a
+failed `noaddr` node. Recreate the cluster to get back to six nodes (see Clean up).
+
+### Clean up
+
+```bash
+helm uninstall docs -n euro-office
+kubectl delete -f redis-sentinel.yaml --ignore-not-found     # or redis-cluster.yaml
+```
+
 ## Common debugging
 
 ```bash
@@ -208,13 +338,15 @@ sudo rm -rf /tmp/euro-office-shared
 
 - `postgres.yaml` — Postgres deployment, service, and secret
 - `redis.yaml` — Redis deployment, service, and secret
+- `redis-sentinel.yaml` — test Redis Sentinel: 2 Redis nodes, 3 Sentinels, secret (QA only)
+- `redis-cluster.yaml` — test Redis Cluster: 6 nodes, init Job, secret (QA only)
 - `rabbitmq.yaml` — RabbitMQ deployment, service, and secret
 - `storage.yaml` — `nfs` StorageClass and static PVs backed by the host-mounted shared directory
 - `my-values.yml` — Helm chart overrides (image references, connection URLs, JWT secret, env vars)
 - `my-values.redis-standalone.yml` — enables Redis for both editor data and statistics using standalone Redis
 - `my-values.redis-data-only.yml` — enables Redis for editor data while keeping statistics in memory
-- `my-values.redis-sentinel.yml` — Sentinel configuration overlay for an external Redis Sentinel deployment
-- `my-values.redis-cluster.yml` — Cluster configuration overlay for an external Redis Cluster deployment
+- `my-values.redis-sentinel.yml` — Sentinel configuration overlay for the test Sentinel in `redis-sentinel.yaml` (or any reachable Redis Sentinel deployment)
+- `my-values.redis-cluster.yml` — Cluster configuration overlay for the test cluster in `redis-cluster.yaml` (or any reachable Redis Cluster deployment)
 
 ## Limitations
 
@@ -224,28 +356,3 @@ This setup is for local testing only:
 - The shared host volume at `/tmp/euro-office-shared` only works because k3d nodes run on a single host; in a real cluster, replace `storage.yaml` with proper NFS or another RWX provisioner
 - Single-replica databases with no backups
 - No TLS, no ingress, port-forwarding only
-
-## Redis editor-storage examples
-
-The base `my-values.yml` leaves both editor stores in their default `memory`
-mode. Apply one of the overlays together with the base values file to select a
-Redis topology. Only one Redis topology may be configured at a time.
-
-The standalone overlay works with the `redis.yaml` manifest included here:
-
-```bash
-helm install docs .. -n euro-office \
-  -f my-values.yml -f my-values.redis-standalone.yml --timeout 10m
-```
-
-The data-only overlay demonstrates that the two storage modules can be chosen
-independently:
-
-```bash
-helm install docs .. -n euro-office \
-  -f my-values.yml -f my-values.redis-data-only.yml --timeout 10m
-```
-
-The Sentinel and Cluster overlays contain example node names and require an
-external topology with those names, or equivalent values edited for the target
-environment. They do not deploy Sentinel or Cluster resources.

@@ -1,5 +1,5 @@
-# Apply together with my-values.yml after providing a reachable Redis Sentinel
-# deployment. This file does not deploy Sentinel itself.
+# Apply together with my-values.yml after deploying the test Sentinel with
+# `kubectl apply -f redis-sentinel.yaml` (2 Redis nodes + 3 Sentinels, see Readme.md).
 #
 # helm install docs .. -n euro-office -f my-values.yml -f my-values.redis-sentinel.yml
 
@@ -8,9 +8,26 @@ docservice:
   editorStatStorage: sentinel
 
 connections:
+  # The three Sentinel pods of redis-sentinel.yaml (StatefulSet redis-sentinel,
+  # headless Service redis-sentinel, namespace euro-office).
   redisSentinelNodes:
-    - redis-sentinel-0.euro-office.svc.cluster.local:26379
-    - redis-sentinel-1.euro-office.svc.cluster.local:26379
-    - redis-sentinel-2.euro-office.svc.cluster.local:26379
+    - redis-sentinel-0.redis-sentinel.euro-office.svc.cluster.local:26379
+    - redis-sentinel-1.redis-sentinel.euro-office.svc.cluster.local:26379
+    - redis-sentinel-2.redis-sentinel.euro-office.svc.cluster.local:26379
   redisSentinelGroupName: mymaster
+  # Password of the Redis nodes, from the Secret created by redis-sentinel.yaml.
+  # my-values.yml sets redisPassword, which has priority over the Secret: clear it.
+  redisPassword: ""
+  redisExistingSecret: redis-sentinel-auth
+  redisSecretKeyName: redis-password
+  # No Sentinel authentication by default (sentinel-password in the Secret is empty).
   redisSentinelNoPass: true
+  #
+  # Sentinel authentication with a named ACL user: set sentinel-user and
+  # sentinel-password in the Secret redis-sentinel-auth and restart the Sentinel
+  # pods (see Readme.md), then replace `redisSentinelNoPass: true` above with:
+  # redisSentinelNoPass: false
+  # redisSentinelUser: sentinel-user-name       # same as sentinel-user in the Secret
+  # redisSentinelExistingSecret: redis-sentinel-auth
+  # redisSentinelSecretKeyName: sentinel-password
+  # For a password-only Sentinel (no named user) leave redisSentinelUser unset.
