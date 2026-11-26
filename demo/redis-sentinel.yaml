@@ -323,14 +323,19 @@ spec:
               echo "requirepass $SENTINEL_PASSWORD"
               echo "sentinel sentinel-pass $SENTINEL_PASSWORD"
               if [ -n "$SENTINEL_USER" ]; then
-                # Minimal ACL of the DocumentServer's Sentinel client (node-redis 6.2.1,
-                # checked with ACL LOG and a failover). It reads the topology
-                # (SENTINEL MASTER/SENTINELS/REPLICAS), reports its library with
-                # CLIENT SETINFO and subscribes to the Sentinel event channels.
-                # AUTH needs no rule, no keys are used. A newer node-redis may need
-                # more: look at `ACL LOG` on the Sentinels.
+                # Minimal ACL of the two Sentinel clients of this setup:
+                #  - DocumentServer's DocService (node-redis 6.2.1): reads the topology
+                #    (SENTINEL MASTER/SENTINELS/REPLICAS), checks each Sentinel with PING at
+                #    startup, reports its library with CLIENT SETINFO and subscribes to the
+                #    Sentinel event channels;
+                #  - the chart's helm test Pod test-ds (redis-py 6.4.0): Sentinel discovery
+                #    calls SENTINEL MASTERS.
+                # Without +ping DocService logs "NOPERM ... 'ping'" for every Sentinel at
+                # startup; without +sentinel|masters test-ds fails with "No master found".
+                # AUTH needs no rule, no keys are used. A newer client may need more: look
+                # at `ACL LOG` on the Sentinels.
                 # Commands: https://valkey.io/topics/sentinel/ ; ACL rules: https://valkey.io/topics/acl/
-                echo "user $SENTINEL_USER on >$SENTINEL_PASSWORD resetchannels &switch-master &[-+]sdown &+slave &+sentinel &[-+]odown &+slave-reconf-done -@all +client|setinfo +sentinel|sentinels +sentinel|master +sentinel|replicas +psubscribe"
+                echo "user $SENTINEL_USER on >$SENTINEL_PASSWORD resetchannels &switch-master &[-+]sdown &+slave &+sentinel &[-+]odown &+slave-reconf-done -@all +client|setinfo +sentinel|sentinels +sentinel|master +sentinel|replicas +sentinel|masters +ping +psubscribe"
               fi
             fi
           } > "$conf"
