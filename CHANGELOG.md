@@ -1,5 +1,47 @@
 # Change log
 
+## 7.0.0
+
+### Breaking Changes
+
+* The `pre-delete` Job is now disabled by default (`delete.job.enabled`). It drops the `doc_changes`, `task_result` and `doc_callbacks` tables, and with in-memory editor state the wait for open documents only counts the documents on the Pod that received the request, so the tables may be dropped while other Pods are still saving
+* Removed the `privateCluster` and `sqlScripts.branchName` parameters
+* The defaults of `*.existingConfigmap.tblCreate.name` and `*.existingConfigmap.tblRemove.name` are now empty. The ConfigMap is mounted only if the name is set
+
+### Changes
+
+* Pinned `images.tag` to `v9.3.8` and `appVersion` to 9.3.8. `cluster-utils` 9.3.8+ is required because it bundles `/scripts/schema`
+* The database Jobs now use the SQL scripts bundled in the `cluster-utils` image under `/scripts/schema/<dbType>/` instead of downloading them at runtime
+
+### Fixes
+
+* Fixed the `pre-install` Job silently creating no tables when the SQL script could not be downloaded. A missing script now fails the Job
+* Fixed the `pre-rollback` ConfigMap staying in the namespace after a successful rollback, which blocked the next rollback
+* Fixed the `pre-upgrade` and `pre-rollback` Jobs running `createdb.sql` and reporting success after `removetbl.sql` failed
+
+## 6.1.0
+
+### New Features
+
+* Added the ability to set `revisionHistoryLimit` for the Docservice, Converter, Adminpanel and Example workloads (`docservice.revisionHistoryLimit`, `converter.revisionHistoryLimit`, `adminpanel.revisionHistoryLimit`, `example.revisionHistoryLimit`)
+* Added the ability to take the AMQP username from an existing Secret (`connections.amqpUserExistingSecret`, `connections.amqpUserSecretKeyName`); when set, `AMQP_USER` is no longer rendered in the `documentserver` ConfigMap
+* Added `checksum/*` annotations to the Docservice, Converter, Adminpanel and Example Pod templates, so the Pods are restarted when the ConfigMaps and Secrets rendered by the chart change
+* Added `customResources.versionSalt` to force a new `DS_VERSION_HASH` after the content of the custom resources PVC changes
+* Added the `resume-server` job (`resumeServer.*`), a `post-upgrade`/`post-rollback` hook that switches the document server back on (`DELETE /internal/cluster/inactive`) after the `pre-upgrade`/`pre-rollback` jobs switched it off, and verifies the result. It is needed because the Pods are no longer restarted on every upgrade
+* Added a version gate to the `pre-upgrade` and `pre-rollback` jobs (`upgrade.job.skipWhenUnchanged`, `rollback.job.skipWhenUnchanged`, default `true`). The server is switched off and the database tables are reset only if the docservice or converter tag or the database connection changes, or if the running version differs from the target
+* README: upgrade lifecycle, Helm hooks under Argo CD and manual recovery (section 13)
+
+### Changes
+
+* **Behavior change:** the default of `docservice.podAnnotations`, `converter.podAnnotations`, `adminpanel.podAnnotations` and `example.podAnnotations` is now `{}` instead of `rollme: "{{ randAlphaNum 5 | quote }}"`. Pods are no longer restarted on every `helm upgrade`, only when the hashed ConfigMaps/Secrets or the image change. Secrets and ConfigMaps not rendered by the chart (`*ExistingSecret`, WOPI keys, `extraConf`, `extraThemes`) and the custom resources PVC content require Stakater Reloader, versioned names or a change of `customResources.versionSalt`. The previous behavior can be restored by setting `rollme: "{{ randAlphaNum 5 | quote }}"` in `*.podAnnotations`
+* **Behavior change:** a `helm upgrade` or `helm rollback` that changes neither the image tags nor the database connection no longer switches the server off and no longer resets the database tables. Set `upgrade.job.skipWhenUnchanged=false` (`rollback.job.skipWhenUnchanged=false`) to get the previous behavior
+* `DS_VERSION_HASH` is no longer derived from the current time. It is computed from the image tag, the `customFonts` / `customDictionaries` / `customPlugins` settings and `customResources.versionSalt`, so the rendered output is deterministic (required for Argo CD)
+
+### Fixes
+
+* Fixed perpetual OutOfSync and unneeded rollouts under Argo CD caused by `rollme` and the time-based `DS_VERSION_HASH`
+* Fixed the document server staying switched off after an upgrade or a rollback once the `rollme` restart was removed
+
 ## 6.0.0
 
 ### New Features

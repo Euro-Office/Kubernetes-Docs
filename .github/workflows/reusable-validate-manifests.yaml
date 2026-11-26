@@ -1,0 +1,130 @@
+# Vendored from https://github.com/ONLYOFFICE/ga-common
+# Source path: .github/workflows/deprecated-recources.yaml
+# Upstream commit: 936e679e0ebe1a52464bbde2535c6d940973c2c5 (master at copy time); file last changed in 3f4517d9da127e1be17b060e9ca13c6c4576199b
+# Local modifications: runs on a pinned runner image, updated tool versions (helm, pluto incl. checksum), actions bumped to Node 24 versions and pinned to commit SHAs.
+name: lint
+
+on:
+  workflow_call:
+    inputs:
+      set_keys:
+        description: 'Set keys for helm template in this field'
+        type: string
+        required: true
+      manual_k8s:
+        description: 'Custom k8s version (latest by default)'
+        type: string
+        required: false
+      pluto_ver:
+        description: 'Pluto version (5.24.5 by default)'
+        type: string
+        required: false
+        default: '5.24.5'
+      pluto_sha256:
+        description: 'SHA-256 of the pluto linux_amd64 tarball for pluto_ver'
+        type: string
+        required: false
+        default: '80076e01a320e1f4db30f5dbc927d204e61cd8abed66fa0b4644ca61cd86b39e'
+
+env: 
+  PLUTO_VER: ${{ inputs.pluto_ver }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate-manifests:
+    name: "K8s manifests api validation"
+    runs-on: ubuntu-26.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: Install helm
+        id: helm-setup
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v3.22.1
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Get lates k8s release
+        id: k8s-release
+        run: |
+            KUBE_RELEASE=$(curl -L -H "Accept: aplication/vnd.github+json" https://api.github.com/repos/kubernetes/kubernetes/releases/latest)
+            echo "kube-latest=$(echo ${KUBE_RELEASE} | jq -r '.tag_name')" >> "$GITHUB_ENV"
+
+      - name: start minikube
+        id: minikube
+        uses: medyagh/setup-minikube@e9e035a86bbc3caea26a450bd4dbf9d0c453682e # v0.0.21
+        with:
+          cpus: 2
+          memory: 6500m
+          kubernetes-version: ${{ env.kube-latest }}
+
+      # pluto is installed outside the chart directory: Helm refuses chart files
+      # larger than 5 MiB, so a pluto binary in the repo root breaks `helm template`.
+      - name: Setup pluto
+        run: |
+            mkdir -p "${RUNNER_TEMP}/pluto"
+            wget -P "${RUNNER_TEMP}/pluto" "https://github.com/FairwindsOps/pluto/releases/download/v${PLUTO_VER}/pluto_${PLUTO_VER}_linux_amd64.tar.gz"
+            echo "${{ inputs.pluto_sha256 }}  ${RUNNER_TEMP}/pluto/pluto_${PLUTO_VER}_linux_amd64.tar.gz" | sha256sum --check --strict
+            tar -zxvf "${RUNNER_TEMP}/pluto/pluto_${PLUTO_VER}_linux_amd64.tar.gz" -C "${RUNNER_TEMP}/pluto" pluto
+            sudo install -m 0755 "${RUNNER_TEMP}/pluto/pluto" /usr/local/bin/pluto
+
+      - name: Manifests validation INFO
+        id: check-manifests
+        env:
+          MANUAL_VER: "${{ inputs.manual_k8s }}"
+        run: |
+
+           # ================================================
+           # All set keys should be delcared is KEYS variable
+           # ================================================
+
+           KEYS=${{ inputs.set_keys }}
+
+           RESULT_JSON=$(helm template -f values.yaml . ${KEYS} \
+                        | pluto detect - --ignore-deprecations \
+                                         --ignore-removals  \
+                                         --target-versions k8s=${MANUAL_VER:-${{ env.kube-latest }}} \
+                                         -ojson)
+
+           DEPRECATED_API=$(echo ${RESULT_JSON} | jq -r '.items[] | select ( .deprecated==true and .removed==false ).name' | paste -sd, || true)
+           REMOVED_API=$(echo ${RESULT_JSON} | jq -r '.items[] | select ( .removed==true ).name' | paste -sd, || true)
+
+           helm template -f values.yaml . ${KEYS} \
+                        | pluto detect - --ignore-deprecations \
+                                         --ignore-removals  \
+                                         --target-versions k8s=${MANUAL_VER:-${{ env.kube-latest }}} \
+                                         -omarkdown
+
+           #############################################
+           ## Check deprecated recources in manifests ##
+           #############################################
+
+           helm template -f ./values.yaml . ${KEYS} > deprecate-check.yaml
+           kubectl --dry-run=server --warnings-as-errors apply -f ./deprecate-check.yaml >out.log 2>&1 || true
+           DEPRECATED_REC=$(awk '/Warning/{print}' out.log)
+
+           if [ "${DEPRECATED_REC}" != "" ]; then
+              echo "::error title=Warning message from k8s:${{ env.kube-latest }} api detected,line=1,col=5,endColumn=7::\
+              "${DEPRECATED_REC}""
+              EXIT_CODE=1
+           fi
+
+           if [ "${REMOVED_API}" != "" ]; then
+              echo "::error title=Removed api detected!,line=1,col=5,endColumn=7::\
+              Api  for this resources: ${REMOVED_API} will be removed. Target version: ${MANUAL_VER:-${{ env.kube-latest }}} \
+              Please check log and get more information"
+              EXIT_CODE=1
+           fi
+
+           if [ "${DEPRECATED_API}" != "" ]; then
+              echo "::warning title=Deprecated api detected,line=1,col=5,endColumn=7::\
+              Api for this recources: ${DEPRECATED_API} will be deprecated. Target version: ${MANUAL_VER:-${{ env.kube-latest }}} \
+              Please check log and get move information"
+              EXIT_CODE=1
+           fi
+
+           exit ${EXIT_CODE}
