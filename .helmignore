@@ -29,3 +29,5 @@ sources/litmus/
 /tests/
 sources/scripts/test_redis_rendering.py
 sources/scripts/test_ds_tls.py
+__pycache__/
+*.pyc
