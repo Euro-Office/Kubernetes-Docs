@@ -15,7 +15,7 @@ This repository contains a set of files to deploy Euro-Office Docs into a Kubern
     + [6.1 Add Helm repositories](#61-add-helm-repositories)
     + [6.2 Installing Prometheus](#62-installing-prometheus)
     + [6.3 Installing StatsD exporter](#63-installing-statsd-exporter)
-  * [7. Make changes to Node-config configuration files](#7-make-changes-to-Node-config-configuration-files)
+  * [7. Make changes to Node-config configuration files](#7-make-changes-to-node-config-configuration-files)
     + [7.1 Create a ConfigMap containing a json file](#71-create-a-configmap-containing-a-json-file)
     + [7.2 Specify parameters when installing Euro-Office Docs](#72-specify-parameters-when-installing-euro-office-docs)
   * [8. Add custom Fonts](#8-add-custom-fonts)
@@ -574,10 +574,9 @@ The `pre-upgrade` Job (`templates/jobs/pre-upgrade.yaml`, script `stop.sh` from
 `templates/configmaps/pre-upgrade.yaml`) sends `PUT /internal/cluster/inactive`
 to the running Docservice, which still has the OLD configuration, and fails
 the upgrade with `The server could not be disabled` unless the answer is
-`true`. On a test cluster, a Docservice with plain connections and a TLS-only
-Redis logged `Redis is unavailable` at that moment and the Job failed. The Job
-runs when the version or the database changes, or always when the image tag has
-no numeric version (a digest or `latest`), see `upgrade.job.skipWhenUnchanged`.
+`true`. A Docservice with plain connections cannot work with a TLS-only Redis,
+so it does not give that answer and the Job fails. The Job runs when the version
+or the database changes, or always when the image tag has no numeric version (a digest or `latest`), see `upgrade.job.skipWhenUnchanged`.
 
 A safe order that keeps the old Docservice connected during the switch:
 

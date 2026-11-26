@@ -21,6 +21,7 @@
 * Added demo manifests `demo/redis-sentinel.yaml` and `demo/redis-cluster.yaml` (Valkey, without TLS) for testing the Sentinel and Cluster editor storage modes and failover; the Sentinel and Cluster values files now point to them
 * Added optional TLS to the demo Sentinel and Cluster test installs: `demo/redis-tls-certs.yaml` has cert-manager resources (a self-signed test CA, a CA Issuer and a server Certificate issued into the Secret `redis-tls`), the manifests switch to TLS when `redis-tls` exists, and `demo/my-values.redis-tls.yml` enables `redisTLS`, `redisSentinelTLS` and `redisCAExistingSecret` (the chart mounts only the `ca.crt` item of that Secret)
 * Added CI for the chart: the `chart-unit-tests` job in `lint.yaml` runs the rendering and connectivity-hook unit tests and `tests/entrypoint_contract.py` (the real DocumentServer entrypoint against the environment of each component, pinned DocumentServer commit), and the weekly `entrypoint-drift` workflow runs the contract against DocumentServer `main`; the test files are excluded from the chart package
+* Documented how to switch an existing release to Redis TLS without failing the `pre-upgrade` Job (README, "Switching an existing release to Redis TLS") and a controlled Cluster failover test with `CLUSTER FAILOVER` (`demo/Readme.md`)
 
 ### Changes
 
@@ -38,6 +39,7 @@
 * Memory editor storage (the default) no longer requires Redis: the Redis password env, Secrets, CA wiring and password validation are rendered only when `editorDataStorage` or `editorStatStorage` is a Redis mode. `test-ds` reports `CheckRedis` as `Skipped` otherwise
 * The `test-ds` Redis check now writes a temporary `ds:helm-test:<uuid>` key with a 60 second expiry, so ACL users restricted to `~ds:*` work
 * `test-ds` now uses all configured Sentinel nodes and all Cluster nodes instead of only the first one, so `helm test` no longer fails when that node is down
+* The `test-ds` RabbitMQ check declares an exclusive queue instead of a transient non-exclusive one, which RabbitMQ 4.3 rejects (`transient_nonexcl_queues` is a deprecated feature), so `helm test` passes with RabbitMQ 4.3 (and 3.13)
 * The post-install notes show the log command of the `test-redis-config` test Pod when Redis editor storage is used
 
 ## 7.0.0
