@@ -22,6 +22,7 @@ generated NODE_CONFIG are never printed.
 """
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -31,7 +32,7 @@ from pathlib import Path
 import yaml
 
 COMPONENTS = ("docservice", "converter", "adminpanel")
-SECRET_KEY = re.compile(r"(PWD|PASS|SECRET|TOKEN|KEY)", re.IGNORECASE)
+SECRET_KEY = re.compile(r"(PWD|PASS|SECRET|TOKEN|KEY|NODE_CONFIG)", re.IGNORECASE)
 
 CASES = {
     "standalone, no user": {
@@ -79,6 +80,19 @@ CASES = {
         "docservice": {"editorDataStorage": "memory", "editorStatStorage": "standalone"},
         "connections": {"redisPassword": "pw"},
     },
+}
+
+
+# A Sentinel configured in the application configuration (NODE_CONFIG, like local.json) without
+# REDIS_SENTINEL_NODES: the entrypoint still applies REDIS_SENTINEL_TLS to it, so the chart must keep
+# rendering REDIS_SENTINEL_TLS=true without Sentinel nodes (and nothing when the flag is false).
+FILE_SENTINEL_CONFIG = {
+    "services": {"CoAuthoring": {"redis": {"optionsSentinel": {
+        "name": "mymaster", "sentinelRootNodes": [{"host": "s1", "port": 26379}]}}}}
+}
+FILE_SENTINEL_CASES = {
+    "file Sentinel, redisSentinelTLS true": ({"redisSentinelTLS": True}, True),
+    "file Sentinel, redisSentinelTLS false": ({}, False),
 }
 
 
@@ -151,6 +165,7 @@ def effective_env(docs, container):
 
 
 def run_entrypoint(entrypoint, mode, env, tmp):
+    """Returns (rc, first error line, path of the generated configuration file)."""
     out = Path(tmp) / ("node-config-%s.json" % mode)  # must not exist: the entrypoint creates it
     process_env = {
         "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin",
@@ -170,7 +185,7 @@ def run_entrypoint(entrypoint, mode, env, tmp):
         cwd=tmp,
     )
     secrets = [v for k, v in env.items() if SECRET_KEY.search(k) and len(v) > 3]
-    return result.returncode, first_line(result.stderr or result.stdout, secrets)
+    return result.returncode, first_line(result.stderr or result.stdout, secrets), out
 
 
 def main():
@@ -216,8 +231,32 @@ def main():
                 failed = True
                 continue
             with tempfile.TemporaryDirectory() as tmp:
-                rc, error = run_entrypoint(entrypoint, mode, env, tmp)
+                rc, error, _ = run_entrypoint(entrypoint, mode, env, tmp)
             rows.append((name, component, str(rc), error))
+            failed = failed or rc != 0
+
+    if not args.case:
+        for name, (connections, expected) in FILE_SENTINEL_CASES.items():
+            values = {"docservice": {"editorDataStorage": "standalone"},
+                      "connections": {"redisPassword": "pw", **connections}}
+            try:
+                docs = render(args.chart, values)
+                doc = workload(docs, "docservice")
+                container = next(c for c in doc["spec"]["template"]["spec"]["containers"] if c["name"] == "docservice")
+                env, _ = effective_env(docs, container)
+                env["NODE_CONFIG"] = json.dumps(FILE_SENTINEL_CONFIG)
+                with tempfile.TemporaryDirectory() as tmp:
+                    rc, error, out = run_entrypoint(entrypoint, "docservice", env, tmp)
+                    tls = None
+                    if rc == 0:
+                        # Only this field is read; the generated configuration is never printed.
+                        redis = json.loads(Path(out).read_text())["services"]["CoAuthoring"]["redis"]
+                        tls = redis.get("optionsSentinel", {}).get("sentinelClientOptions", {}).get("socket", {}).get("tls")
+                if rc == 0 and (tls is True) != expected:
+                    rc, error = 1, "sentinelClientOptions.socket.tls is %s, expected %s" % (tls, True if expected else "not true")
+            except (RuntimeError, StopIteration) as exc:
+                rc, error = 1, str(exc) or "docservice container not found"
+            rows.append((name, "docservice", str(rc), error))
             failed = failed or rc != 0
 
     print("%-32s %-12s %-5s %s" % ("case", "component", "rc", "first error line"))
@@ -226,7 +265,7 @@ def main():
     if failed:
         print("\nFAILED: the entrypoint rejects the environment of at least one component")
         return 1
-    print("\nOK: %d cases x %d components" % (len(cases), len(COMPONENTS)))
+    print("\nOK: %d cases x %d components%s" % (len(cases), len(COMPONENTS), "" if args.case else " + %d file-Sentinel checks" % len(FILE_SENTINEL_CASES)))
     return 0
 
 

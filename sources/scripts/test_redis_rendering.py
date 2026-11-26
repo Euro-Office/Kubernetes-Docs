@@ -751,7 +751,7 @@ class RedisBooleanParsing(unittest.TestCase):
                 documents = self.documents(self.values(self.STANDALONE, redisTLS=text, redisCAExistingSecret="ca"))
                 config = next(doc["data"] for doc in documents if doc["metadata"]["name"] == "documentserver")
                 self.assertEqual(config["REDIS_SERVER_TLS"], "true")
-                self.assertEqual(config["REDIS_SENTINEL_TLS"], "false")
+                self.assertNotIn("REDIS_SENTINEL_TLS", config)  # false and no Sentinel nodes: not rendered
                 self.assertIn("NODE_EXTRA_CA_CERTS", self.env_names(documents))
                 volumes = self.docservice(documents)["spec"]["template"]["spec"]["volumes"]
                 self.assertIn("redis-ca-certificates", [v["name"] for v in volumes])
@@ -788,6 +788,50 @@ class RedisBooleanParsing(unittest.TestCase):
             with self.subTest(redisSentinelNoPass=text):
                 names = self.env_names(self.documents(self.values(self.SENTINEL, redisSentinelNoPass=text)))
                 self.assertEqual("REDIS_SENTINEL_PWD" in names, present)
+
+
+class UnusedRedisConfigMapKeys(unittest.TestCase):
+    """REDIS_CONNECTOR_NAME is never rendered; REDIS_SENTINEL_TLS only for Sentinel nodes or a true flag."""
+
+    TOPOLOGIES = {
+        "memory": {"docservice": {}, "connections": {}},
+        "standalone": {"docservice": {"editorDataStorage": "standalone"}, "connections": {"redisPassword": "x"}},
+        "cluster": {"docservice": {"editorDataStorage": "cluster"},
+                    "connections": {"redisPassword": "x", "redisClusterNodes": ["c1:6379"]}},
+        "sentinel": {"docservice": {"editorDataStorage": "sentinel"},
+                     "connections": {"redisPassword": "x", "redisSentinelNodes": ["s1:26379"]}},
+    }
+
+    def config(self, topology, **connections):
+        base = self.TOPOLOGIES[topology]
+        result = render({"docservice": base["docservice"], "connections": {**base["connections"], **connections}})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        documents = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+        return next(doc["data"] for doc in documents if doc["metadata"]["name"] == "documentserver")
+
+    def test_connector_name_is_never_rendered(self):
+        for topology in self.TOPOLOGIES:
+            for flag in (False, True):
+                with self.subTest(topology=topology, redisSentinelTLS=flag):
+                    self.assertNotIn("REDIS_CONNECTOR_NAME", self.config(topology, redisSentinelTLS=flag))
+
+    def test_sentinel_tls_absent_when_false_without_sentinel_nodes(self):
+        for topology in ("memory", "standalone", "cluster"):
+            with self.subTest(topology=topology):
+                self.assertNotIn("REDIS_SENTINEL_TLS", self.config(topology))
+                self.assertNotIn("REDIS_SENTINEL_TLS", self.config(topology, redisSentinelTLS="false"))
+
+    def test_sentinel_tls_true_is_kept_in_any_mode(self):
+        # The entrypoint also applies it to a Sentinel configured in local.json or NODE_CONFIG.
+        for topology in self.TOPOLOGIES:
+            for value in (True, "true", "Yes"):
+                with self.subTest(topology=topology, redisSentinelTLS=value):
+                    self.assertEqual(self.config(topology, redisSentinelTLS=value)["REDIS_SENTINEL_TLS"], "true")
+
+    def test_sentinel_mode_renders_both_values(self):
+        self.assertEqual(self.config("sentinel")["REDIS_SENTINEL_TLS"], "false")
+        self.assertEqual(self.config("sentinel", redisSentinelTLS="off")["REDIS_SENTINEL_TLS"], "false")
+        self.assertEqual(self.config("sentinel", redisSentinelTLS=True)["REDIS_SENTINEL_TLS"], "true")
 
 
 if __name__ == "__main__":

@@ -512,7 +512,9 @@ connections:
 ```
 
 These values render as the quoted `REDIS_SERVER_TLS` and
-`REDIS_SENTINEL_TLS` environment variables. Use a DocumentServer image containing
+`REDIS_SENTINEL_TLS` environment variables (`REDIS_SENTINEL_TLS` only with
+`connections.redisSentinelNodes` or when `connections.redisSentinelTLS` is true;
+a missing value means false). Use a DocumentServer image containing
 the TLS changes in both the standalone and orchestrated entrypoints; older
 images do not support these flags. `REDIS_SERVER_TLS=true` enables
 `options.socket.tls`, `optionsSentinel.nodeClientOptions.socket.tls`, and
