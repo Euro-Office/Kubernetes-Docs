@@ -41,3 +41,49 @@ jobs:
                --set converter.autoscaling.enabled=true \
                --set ingress.enabled=true \
                --set serviceAccount.create=true"
+
+  chart-unit-tests:
+    name: "chart unit tests and entrypoint contract"
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout chart
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.15.2'
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: 'v3.22.1'
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # redis-py of the tests image (ghcr.io/euro-office/cluster-utils) is not known
+      # from this repository: 6.4.0 is the newest 6.x that test_ds_tls.py passes with.
+      - name: Install test dependencies
+        run: python3 -m pip install pyyaml redis==6.4.0
+
+      - name: Rendering and connectivity-hook unit tests
+        run: |
+          python3 -I sources/scripts/test_redis_rendering.py
+          python3 -I sources/scripts/test_ds_tls.py
+
+      # Pinned DocumentServer commit (main on 2026-11-26, contains
+      # build/scripts/redis-topology.sh): the PR check must not change when
+      # DocumentServer main changes. The weekly entrypoint-drift workflow checks
+      # main; move this pin forward when that run shows a needed change.
+      - name: Checkout DocumentServer entrypoint scripts
+        uses: actions/checkout@v7
+        with:
+          repository: Euro-Office/DocumentServer
+          ref: 825f931d59a0c309cffd17b4fa572bda4bff3317
+          sparse-checkout: build/scripts
+          path: ds
+          persist-credentials: false
+
+      - name: Entrypoint contract
+        run: python3 -I tests/entrypoint_contract.py --ds-scripts ds/build/scripts

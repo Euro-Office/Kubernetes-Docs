@@ -64,6 +64,7 @@ This repository contains a set of files to deploy Euro-Office Docs into a Kubern
     + [1.2 Deploy Grafana with the installation of ready-made dashboards](#12-deploy-grafana-with-the-installation-of-ready-made-dashboards)
   * [2 Access to Grafana via Ingress](#2-access-to-grafana-via-ingress)
   * [3. View gathered metrics in Grafana](#3-view-gathered-metrics-in-grafana)
+- [Development tests](#development-tests)
 
 ## Requirements
 
@@ -1735,3 +1736,24 @@ $ kubectl get secret grafana-admin --namespace default -o jsonpath="{.data.GF_SE
 ```
 
 In the dashboard section, you will see the added dashboards that will display the metrics received from Prometheus.
+
+## Development tests
+
+The chart has unit tests and an entrypoint contract check. They run in CI (`chart-unit-tests` in `.github/workflows/lint.yaml`) and are not part of the packaged chart. They need Python 3, `helm`, `bash` and `jq`:
+
+```bash
+pip install pyyaml redis==6.4.0
+
+# Rendering tests (Redis storage modes, authentication, TLS, validation)
+python3 -I sources/scripts/test_redis_rendering.py
+# Connectivity hook (helm test) tests
+python3 -I sources/scripts/test_ds_tls.py
+
+# Entrypoint contract: runs the real DocumentServer entrypoint (ENTRYPOINT_CONFIG_ONLY) with the environment
+# the chart gives the docservice, converter and adminpanel containers, for several Redis setups
+git clone --depth 1 --filter=blob:none --sparse https://github.com/Euro-Office/DocumentServer ds
+git -C ds sparse-checkout set build/scripts
+python3 -I tests/entrypoint_contract.py --ds-scripts ds/build/scripts
+```
+
+`--case "<name>"` runs one case. CI checks a pinned DocumentServer commit on pull requests, and the weekly `entrypoint-drift` workflow checks DocumentServer `main`.
