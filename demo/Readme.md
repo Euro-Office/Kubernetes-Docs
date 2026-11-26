@@ -238,10 +238,11 @@ kubectl exec -n euro-office redis-node-0 -- sh -c 'REDISCLI_AUTH=redis redis-cli
 Document editing must keep working during and after the failover.
 
 **Sentinel authentication.** Set `sentinel-password` (letters and digits only) in the Secret
-`redis-sentinel-auth` and, for a named ACL user, `sentinel-user` as well. The user can only do what a
-Sentinel client needs (authenticate, `SENTINEL get-master-addr-by-name|sentinels|master|replicas`,
-`CLIENT SETNAME`, `PING`, subscribe). Then restart the Sentinels and the nodes, and upgrade the
-release with the lines described in the comments of `my-values.redis-sentinel.yml`:
+`redis-sentinel-auth` and, for a named ACL user, `sentinel-user` as well. The user can only do what the
+Sentinel clients of this setup need (authenticate, `PING`, `SENTINEL master|masters|sentinels|replicas`,
+`CLIENT SETINFO`, subscribe to the Sentinel event channels), see the comment in `redis-sentinel.yaml`.
+It cannot run other commands, for example `SENTINEL get-master-addr-by-name`. Then restart the Sentinels
+and the nodes, and upgrade the release with the lines described in the comments of `my-values.redis-sentinel.yml`:
 
 ```bash
 kubectl edit secret redis-sentinel-auth -n euro-office     # or re-apply the file after editing stringData
@@ -252,7 +253,7 @@ helm upgrade docs .. -n euro-office -f my-values.yml -f my-values.redis-sentinel
   --set connections.redisSentinelExistingSecret=redis-sentinel-auth \
   --set connections.redisSentinelSecretKeyName=sentinel-password
 # password only, without a named user: omit redisSentinelUser
-# check with: redis-cli --user <sentinel-user> -a <sentinel-password> -p 26379 SENTINEL get-master-addr-by-name mymaster
+# check with: redis-cli --user <sentinel-user> -a <sentinel-password> -p 26379 SENTINEL master mymaster
 ```
 
 ### Cluster (6 nodes: 3 primaries, 3 replicas)
