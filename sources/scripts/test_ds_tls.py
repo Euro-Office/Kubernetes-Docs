@@ -143,5 +143,57 @@ class RedisTLSConnectivity(unittest.TestCase):
             self.assertNotIn("ssl_ca_certs", options)
 
 
+class RedisAllNodes(unittest.TestCase):
+    """The Sentinel and Cluster clients get every configured node, in order, and the other options are unchanged."""
+
+    BASE = {
+        "DB_PORT": "5432", "REDIS_SERVER_HOST": "redis", "REDIS_SERVER_PORT": "6379",
+        "REDIS_SERVER_USER": "app", "REDIS_SERVER_PWD": "pw",
+        "REDIS_SERVER_TLS": "true", "REDIS_SERVER_CA_CERTS": "/ca/nodes.pem",
+        "REDIS_SENTINEL_TLS": "true", "REDIS_SENTINEL_CA_CERTS": "/ca/sentinels.pem",
+        "REDIS_SENTINEL_USER": "su", "REDIS_SENTINEL_PWD": "sp",
+    }
+
+    def load(self, env):
+        spec = importlib.util.spec_from_file_location("connectivity_hook", SCRIPT)
+        hook = importlib.util.module_from_spec(spec)
+        with patch.dict(os.environ, {**self.BASE, **env}, clear=True):
+            spec.loader.exec_module(hook)
+        hook.logger_test_ds = Mock()
+        return hook
+
+    def test_parse_nodes(self):
+        hook = self.load({})
+        self.assertEqual(hook.parse_nodes("a:1 b.example:2  c:3"), [("a", 1), ("b.example", 2), ("c", 3)])
+        self.assertEqual(hook.parse_nodes("[::1]:26379 rediss://h:6380"), [("::1", 26379), ("h", 6380)])
+        self.assertEqual(hook.parse_nodes(""), [])
+
+    def test_sentinel_gets_all_nodes(self):
+        hook = self.load({"REDIS_SENTINEL_NODES": "s0:26379 s1:26380 s2:26381", "REDIS_SENTINEL_GROUP_NAME": "mymaster"})
+        with patch.object(redis, "Redis") as client, patch.object(redis, "Sentinel") as sentinel:
+            sentinel.return_value.discover_master.return_value = ("master", 6379)
+            client.return_value.ping.return_value = True
+            self.assertIs(hook.get_redis_sentinel_status(), True)
+        self.assertEqual(sentinel.call_args.args[0], [("s0", 26379), ("s1", 26380), ("s2", 26381)])
+        kwargs = sentinel.call_args.kwargs["sentinel_kwargs"]
+        self.assertEqual((kwargs["username"], kwargs["password"], kwargs["ssl"], kwargs["ssl_ca_certs"]),
+                         ("su", "sp", True, "/ca/sentinels.pem"))
+        sentinel.return_value.discover_master.assert_called_once_with("mymaster")
+        data = client.call_args.kwargs
+        self.assertEqual((data["host"], data["username"], data["password"], data["ssl_ca_certs"]),
+                         ("master", "app", "pw", "/ca/nodes.pem"))
+
+    def test_cluster_gets_all_startup_nodes(self):
+        hook = self.load({"REDIS_CLUSTER_NODES": "c0:6379 c1:6380 c2:6381"})
+        with patch.object(redis.cluster, "RedisCluster") as cluster:
+            cluster.return_value.ping.return_value = True
+            self.assertIs(hook.get_redis_cluster_status(), True)
+        nodes = cluster.call_args.kwargs["startup_nodes"]
+        self.assertEqual([(n.host, n.port) for n in nodes], [("c0", 6379), ("c1", 6380), ("c2", 6381)])
+        kwargs = cluster.call_args.kwargs
+        self.assertEqual((kwargs["username"], kwargs["password"], kwargs["ssl"], kwargs["ssl_ca_certs"]),
+                         ("app", "pw", True, "/ca/nodes.pem"))
+
+
 if __name__ == "__main__":
     unittest.main()

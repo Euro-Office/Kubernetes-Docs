@@ -16,6 +16,16 @@ def redis_tls_options(prefix):
     return options
 
 
+def parse_nodes(value):
+    """'host:port host:port' -> [(host, port), ...]. Also accepts [IPv6]:port and a redis:// or rediss:// prefix."""
+    nodes = []
+    for node in (value or '').split():
+        node = node.split('://', 1)[-1]
+        host, _, port = node.rpartition(':')
+        nodes.append((host.strip('[]'), int(port)))
+    return nodes
+
+
 redisHost = os.environ.get('REDIS_SERVER_HOST')
 redisPort = os.environ.get('REDIS_SERVER_PORT')
 redisUser = os.environ.get('REDIS_SERVER_USER')
@@ -27,14 +37,10 @@ redisSentinelPassword = os.environ.get('REDIS_SENTINEL_PWD')
 redisDBNum = os.environ.get('REDIS_SERVER_DB_NUM')
 redisConnectTimeout = 15
 if os.environ.get('REDIS_CLUSTER_NODES'):
-    redisClusterNodes = list(os.environ.get('REDIS_CLUSTER_NODES').split(" "))
-    redisClusterNode = redisClusterNodes[0].split(":")[0]
-    redisClusterPort = redisClusterNodes[0].split(":")[1]
+    redisClusterNodes = parse_nodes(os.environ.get('REDIS_CLUSTER_NODES'))
 if os.environ.get('REDIS_SENTINEL_NODES'):
     redisSentinelGroupName = os.environ.get('REDIS_SENTINEL_GROUP_NAME')
-    redisSentinelNodes = list(os.environ.get('REDIS_SENTINEL_NODES').split(" "))
-    redisSentinelNode = redisSentinelNodes[0].split(":")[0]
-    redisSentinelPort = redisSentinelNodes[0].split(":")[1]
+    redisSentinelNodes = parse_nodes(os.environ.get('REDIS_SENTINEL_NODES'))
 
 dbType = os.environ.get('DB_TYPE')
 dbHost = os.environ.get('DB_HOST')
@@ -106,7 +112,7 @@ def get_redis_cluster_status():
     retry_strategy = Retry(ExponentialBackoff(), retries=3)
     global rc
     try:
-        nodes = [ClusterNode(redisClusterNode, redisClusterPort)]
+        nodes = [ClusterNode(host, port) for host, port in redisClusterNodes]
         rc = Redis(
             startup_nodes=nodes,
             username=redisUser,
@@ -137,7 +143,7 @@ def get_redis_sentinel_status():
             sentinel_kwargs['username'] = redisSentinelUser
         if redisSentinelPassword:
             sentinel_kwargs['password'] = redisSentinelPassword
-        sentinel = Sentinel([(redisSentinelNode, redisSentinelPort)], socket_timeout=redisConnectTimeout, sentinel_kwargs=sentinel_kwargs)
+        sentinel = Sentinel(redisSentinelNodes, socket_timeout=redisConnectTimeout, sentinel_kwargs=sentinel_kwargs)
         master_host, master_port = sentinel.discover_master(redisSentinelGroupName)
         rc = redis.Redis(
             host=master_host,
