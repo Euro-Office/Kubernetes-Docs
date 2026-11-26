@@ -275,17 +275,44 @@ kubectl exec -n euro-office redis-cluster-0 -- sh -c 'REDISCLI_AUTH=redis redis-
 
 Expected: `cluster_state:ok`, `cluster_slots_ok:16384`, `cluster_known_nodes:6`, three `master` and three `slave` lines.
 
-Failover test. The data directory is an `emptyDir`, so stop the `redis-server` process (the container
+Failover test (controlled). `CLUSTER FAILOVER` must be sent to a replica; the replica and its primary
+coordinate the switch, so no acknowledged write is lost
+([CLUSTER FAILOVER](https://valkey.io/commands/cluster-failover/)). The command only schedules the
+failover, so an `OK` does not prove that it worked: check the result.
+
+```bash
+# 1. Pick a primary and one of its replicas from CLUSTER NODES. The replica line names its primary
+#    (the 4th column is the node id of the primary). Here: replica redis-cluster-3.
+kubectl exec -n euro-office redis-cluster-0 -- sh -c 'REDISCLI_AUTH=redis redis-cli CLUSTER NODES'
+# 2. Run the failover ON THE REPLICA
+kubectl exec -n euro-office redis-cluster-3 -- sh -c 'REDISCLI_AUTH=redis redis-cli CLUSTER FAILOVER'
+# 3. Verify, after a few seconds: the replica is now a primary and the old primary a replica of it
+kubectl exec -n euro-office redis-cluster-3 -- sh -c 'REDISCLI_AUTH=redis redis-cli ROLE | head -n 1'   # master
+kubectl exec -n euro-office redis-cluster-0 -- sh -c 'REDISCLI_AUTH=redis redis-cli CLUSTER NODES'
+kubectl exec -n euro-office redis-cluster-0 -- sh -c 'REDISCLI_AUTH=redis redis-cli CLUSTER INFO' | grep -E 'cluster_state|cluster_slots_ok'
+```
+
+Expected: `redis-cluster-3` shows `master` with the slots of the old primary, the old primary shows `slave`
+with `redis-cluster-3` as its primary, `cluster_state:ok`, `cluster_slots_ok:16384`, still three `master`
+and three `slave` lines. Run `helm test` afterwards (and, for a stricter check, while a document is open).
+With TLS add `--tls --cacert /tls/ca.crt` to `redis-cli`. `CLUSTER FAILOVER FORCE` and `TAKEOVER` skip
+parts of the coordination and are for an unreachable primary; they are not needed here.
+
+Node restart test. The data directory is an `emptyDir`, so stop the `redis-server` process (the container
 restarts and keeps its node identity) instead of deleting the pod:
 
 ```bash
 # 1. Pick a primary from CLUSTER NODES (here redis-cluster-1) and stop its server
 kubectl exec -n euro-office redis-cluster-1 -- sh -c 'REDISCLI_AUTH=redis redis-cli SHUTDOWN NOSAVE'
-# 2. Within ~15 s its replica is promoted and the cluster is healthy again
+# 2. The container restarts; check that the cluster is healthy again
 kubectl exec -n euro-office redis-cluster-0 -- sh -c 'REDISCLI_AUTH=redis redis-cli CLUSTER INFO' | grep cluster_state
-# 3. The restarted node rejoins as a replica of the promoted node
 kubectl exec -n euro-office redis-cluster-0 -- sh -c 'REDISCLI_AUTH=redis redis-cli CLUSTER NODES'
 ```
+
+This proves that the application survives a node restart and that the node rejoins with its identity. It does
+not prove a promotion: the container restarts within about 10 s, which can be before the replicas of the
+primary (`--cluster-node-timeout 5000`) have promoted one of them, and then the same node is a primary
+again (on a test cluster, the roles did not change). Use the `CLUSTER FAILOVER` test above to test the promotion.
 
 Deleting a cluster pod (`kubectl delete pod`) also tests the promotion (`cluster_state:ok` again), but the
 recreated pod is a new empty node that does not rejoin the cluster by itself: the cluster then lists a
