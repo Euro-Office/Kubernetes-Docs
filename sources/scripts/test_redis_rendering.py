@@ -4,8 +4,10 @@
     python3 sources/scripts/test_redis_rendering.py
 """
 
+import atexit
 import itertools
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -20,14 +22,63 @@ CHART = Path(__file__).resolve().parents[2]
 AUTH_MODES = {"none": "ignored-user", "password": "", "acl": "app-user"}
 
 
+_ISOLATED_HOME = tempfile.TemporaryDirectory()
+atexit.register(_ISOLATED_HOME.cleanup)
+
+
+def helm_env():
+    """Environment for helm: no kubeconfig and an empty home, so no command can reach a cluster."""
+    env = {k: v for k, v in os.environ.items() if k != "KUBECONFIG"}
+    env["HOME"] = _ISOLATED_HOME.name
+    return env
+
+
 def render(values, chart=CHART):
     with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as overrides:
         json.dump(values, overrides)
         overrides.flush()
         return subprocess.run(
             ["helm", "template", "redis-auth-test", str(chart), "-f", overrides.name],
-            text=True, capture_output=True, check=False,
+            text=True, capture_output=True, check=False, env=helm_env(),
         )
+
+
+_NOTES_CHART = tempfile.TemporaryDirectory()
+atexit.register(_NOTES_CHART.cleanup)
+_notes_chart_ready = []
+
+
+def notes_chart():
+    """A copy of the chart in which templates/NOTES.txt is also a named template rendered into a ConfigMap.
+
+    helm template does not render NOTES.txt, and a client-side dry run of the install command still asks the API
+    server for its version, so neither works without a cluster."""
+    path = Path(_NOTES_CHART.name) / "chart"
+    if not _notes_chart_ready:
+        shutil.copytree(CHART, path, ignore=shutil.ignore_patterns(".git", "tests", "__pycache__"))
+        notes = (CHART / "templates" / "NOTES.txt").read_text()
+        (path / "templates" / "_zz_notes.tpl").write_text('{{- define "zz.notes" -}}' + notes + "{{- end -}}\n")
+        (path / "templates" / "zz-notes.yaml").write_text(
+            "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: zz-notes\ndata:\n"
+            '  notes: {{ include "zz.notes" . | toJson }}\n')
+        _notes_chart_ready.append(True)
+    return path
+
+
+def render_notes(values, suffix=None, release="notes-test"):
+    """The rendered NOTES.txt (a string) for the values, without a cluster. Raises AssertionError on a failure."""
+    values = {**values, **({"commonNameSuffix": suffix} if suffix else {})}
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as overrides:
+        json.dump(values, overrides)
+        overrides.flush()
+        result = subprocess.run(
+            ["helm", "template", release, str(notes_chart()), "--show-only", "templates/zz-notes.yaml",
+             "-f", overrides.name],
+            text=True, capture_output=True, check=False, env=helm_env(),
+        )
+    if result.returncode != 0:
+        raise AssertionError(result.stderr)
+    return yaml.safe_load(result.stdout)["data"]["notes"]
 
 
 def environment_lists(value):
@@ -435,15 +486,7 @@ class LegacyConnectorName(unittest.TestCase):
     NOTICE = "connections.redisConnectorName is obsolete since chart 8.0.0"
 
     def notes(self, values):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as overrides:
-            json.dump(values, overrides)
-            overrides.flush()
-            result = subprocess.run(
-                ["helm", "install", "connector-test", str(CHART), "--dry-run=client", "-f", overrides.name],
-                text=True, capture_output=True, check=False,
-            )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return result.stdout.split("NOTES:", 1)[1]
+        return render_notes(values, release="connector-test")
 
     def test_other_values_fail(self):
         for name in ("ioredis", "something"):
@@ -465,20 +508,12 @@ class LegacyConnectorName(unittest.TestCase):
 
 
 class MemoryMultiReplicaWarning(unittest.TestCase):
-    """helm template does not render NOTES.txt; helm install --dry-run=client does, without a cluster."""
+    """NOTES.txt is rendered offline by render_notes (helm template of a copy of the chart)."""
 
     WARNING = "WARNING: In-memory editor storage with more than one DocService Pod."
 
     def notes(self, values):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as overrides:
-            json.dump(values, overrides)
-            overrides.flush()
-            result = subprocess.run(
-                ["helm", "install", "notes-test", str(CHART), "--dry-run=client", "-f", overrides.name],
-                text=True, capture_output=True, check=False,
-            )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return result.stdout.split("NOTES:", 1)[1]
+        return render_notes(values)
 
     def test_default_warns(self):
         notes = self.notes({})
@@ -689,15 +724,7 @@ class StorageModeConsistency(unittest.TestCase):
         return {"docservice": docservice, "connections": self.CONNECTIONS[topology]}, effective_data, effective_stat
 
     def notes(self, values):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as overrides:
-            json.dump(values, overrides)
-            overrides.flush()
-            result = subprocess.run(
-                ["helm", "install", "notes-test", str(CHART), "--dry-run=client", "-f", overrides.name],
-                text=True, capture_output=True, check=False,
-            )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return result.stdout
+        return render_notes(values)
 
     def test_modes_agree_everywhere(self):
         for data, stat in self.combinations():
@@ -838,16 +865,7 @@ class RedisTestHookNotes(unittest.TestCase):
     """NOTES.txt mentions the test-redis-config hook only when the hook is rendered."""
 
     def notes(self, values, suffix=None):
-        values = {**values, **({"commonNameSuffix": suffix} if suffix else {})}
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as overrides:
-            json.dump(values, overrides)
-            overrides.flush()
-            result = subprocess.run(
-                ["helm", "install", "notes-test", str(CHART), "--dry-run=client", "-f", overrides.name],
-                text=True, capture_output=True, check=False,
-            )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return result.stdout.split("NOTES:", 1)[1]
+        return render_notes(values, suffix)
 
     def test_redis_modes_mention_the_hook(self):
         for mode, connections in (("standalone", {"redisPassword": "x"}),
