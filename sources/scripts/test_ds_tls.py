@@ -8,6 +8,7 @@ import importlib.util
 import itertools
 import os
 from pathlib import Path
+import sys
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 
@@ -193,6 +194,31 @@ class RedisAllNodes(unittest.TestCase):
         kwargs = cluster.call_args.kwargs
         self.assertEqual((kwargs["username"], kwargs["password"], kwargs["ssl"], kwargs["ssl_ca_certs"]),
                          ("app", "pw", True, "/ca/nodes.pem"))
+
+
+class RabbitMQQueue(unittest.TestCase):
+    def test_test_queue_is_exclusive(self):
+        """RabbitMQ 4.x denies transient non-exclusive queues by default (transient_nonexcl_queues)."""
+        hook = load_hook({})
+        hook.total_result.clear()
+        pika = MagicMock()
+        pika.BlockingConnection.return_value.is_open = True
+        channel = pika.BlockingConnection.return_value.channel.return_value
+        with patch.dict(sys.modules, {"pika": pika}):
+            hook.check_mq_rabbitmq()
+        channel.queue_declare.assert_called_once_with(queue="testDocsServer", exclusive=True)
+        channel.queue_delete.assert_called_once_with(queue="testDocsServer")
+        self.assertEqual(hook.total_result["CheckRabbitMQ"], "Success")
+
+    def test_declare_error_fails_the_check(self):
+        hook = load_hook({})
+        hook.total_result.clear()
+        pika = MagicMock()
+        pika.BlockingConnection.return_value.is_open = True
+        pika.BlockingConnection.return_value.channel.return_value.queue_declare.side_effect = Exception("denied")
+        with patch.dict(sys.modules, {"pika": pika}):
+            hook.check_mq_rabbitmq()
+        self.assertEqual(hook.total_result["CheckRabbitMQ"], "Failed")
 
 
 if __name__ == "__main__":
