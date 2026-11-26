@@ -296,11 +296,17 @@ failed `noaddr` node. Recreate the cluster to get back to six nodes (see Clean u
 Both test installs can run with TLS (Redis nodes, Sentinels and the cluster bus) and a private CA. This
 tests `connections.redisTLS`, `connections.redisSentinelTLS` and `connections.redisCAExistingSecret`,
 including that the Converter starts without the Redis CA. It is off by default; the manifests switch to TLS
-when the optional Secret `redis-tls` exists, with the same ports.
+when the optional Secret `redis-tls` exists, with the same ports. The certificates are issued by
+[cert-manager](https://cert-manager.io/docs/), which must be installed
+(`kubectl get crd certificates.cert-manager.io`). `redis-tls-certs.yaml` holds a namespaced self-signed test CA,
+a CA Issuer and one server certificate for the three headless Services; the Secret `redis-tls` it produces
+holds `tls.crt`, `tls.key` and `ca.crt`.
 
 ```bash
-# 1. Test CA and server certificate; creates the Secrets redis-tls (for the Redis pods) and redis-ca (for the chart)
-sh redis-tls.sh euro-office
+# 1. Issue the certificates (recommended pre-check first), then wait until they are Ready
+kubectl -n euro-office apply --dry-run=server -f redis-tls-certs.yaml
+kubectl apply -f redis-tls-certs.yaml
+kubectl -n euro-office wait --for=condition=Ready certificate/redis-test-ca certificate/redis-tls --timeout=120s
 
 # 2. Restart the Redis pods so that they start in TLS mode
 kubectl rollout restart statefulset/redis-node statefulset/redis-sentinel -n euro-office      # Sentinel
@@ -311,6 +317,9 @@ kubectl delete job/redis-cluster-init -n euro-office --ignore-not-found && kubec
 helm install docs .. -n euro-office -f my-values.yml -f my-values.redis-sentinel.yml -f my-values.redis-tls.yml --timeout 10m
 # Cluster: -f my-values.redis-cluster.yml instead of the Sentinel overlay
 ```
+
+The chart takes the CA from the `ca.crt` item of the Secret `redis-tls` only, so the private key in that Secret
+is not mounted into DocService, AdminPanel or the test Pods.
 
 Checks:
 
@@ -335,13 +344,21 @@ commands (and `redis-cli` needs no extra options for the Sentinel password, whic
 Negative test: install with the TLS overlay but without the CA, for example with
 `--set connections.redisCAExistingSecret=`. The chart renders (the default trust store is used), but the
 test CA is unknown: DocService and `helm test` cannot connect to Redis and report
-`SELF_SIGNED_CERT_IN_CHAIN`. Install again with `redisCAExistingSecret: redis-ca` to fix it.
+`SELF_SIGNED_CERT_IN_CHAIN`. Install again with `redisCAExistingSecret: redis-tls` to fix it.
 
-To go back to plain Redis: delete the Secrets, restart the StatefulSets as above (and create the cluster
-again), and install without `my-values.redis-tls.yml`:
+Renewal: cert-manager renews the certificates (30 days before they expire) and updates the Secret. The
+Valkey 8.1 image used here has no `tls-auto-reload-interval` (the setting is described in the
+[Valkey TLS documentation](https://valkey.io/topics/tls/) for newer versions, and `CONFIG GET` returns
+nothing on 8.1.12), so restart the Redis pods after a renewal. DocService reads the CA only when its Pod
+starts (`NODE_EXTRA_CA_CERTS`), so restart it too (the CA key is kept on renewal, `rotationPolicy: Never`).
+
+To go back to plain Redis: delete the certificates and the Secrets, restart the StatefulSets as above (and
+create the cluster again), and install without `my-values.redis-tls.yml`. cert-manager does not delete the
+Secrets with the Certificates:
 
 ```bash
-kubectl delete secret redis-tls redis-ca -n euro-office
+kubectl delete -f redis-tls-certs.yaml
+kubectl delete secret redis-tls redis-test-ca -n euro-office --ignore-not-found
 ```
 
 ### Clean up
@@ -399,7 +416,7 @@ sudo rm -rf /tmp/euro-office-shared
 - `my-values.redis-standalone.yml` — enables Redis for both editor data and statistics using standalone Redis
 - `my-values.redis-data-only.yml` — enables Redis for editor data while keeping statistics in memory
 - `my-values.redis-sentinel.yml` — Sentinel configuration overlay for the test Sentinel in `redis-sentinel.yaml` (or any reachable Redis Sentinel deployment)
-- `redis-tls.sh` — creates a test CA and the Secrets `redis-tls` and `redis-ca` for the optional TLS mode of the Sentinel and Cluster test installs
+- `redis-tls-certs.yaml` — cert-manager Issuers and Certificates (test CA and the Secret `redis-tls`) for the optional TLS mode of the Sentinel and Cluster test installs
 - `my-values.redis-tls.yml` — TLS overlay (after a Sentinel or Cluster overlay)
 - `my-values.redis-cluster.yml` — Cluster configuration overlay for the test cluster in `redis-cluster.yaml` (or any reachable Redis Cluster deployment)
 

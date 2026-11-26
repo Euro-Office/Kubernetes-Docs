@@ -3,14 +3,15 @@
 # (plain by default, TLS optional), adapted to Kubernetes. For QA only: no
 # persistence, no PVCs.
 #
-# TLS: off by default. To switch it on run `sh redis-tls.sh` (creates the Secrets
-# redis-tls and redis-ca from a test CA), then
+# TLS: off by default. To switch it on apply redis-tls-certs.yaml (cert-manager
+# issues the Secret redis-tls from a test CA), then
 #   kubectl rollout restart statefulset/redis-cluster -n euro-office
 # and create the cluster again (delete the Job and apply this file; the nodes
 # start empty after the restart). The pods use TLS when the optional Secret
 # redis-tls is mounted at /tls, with the same ports. To switch it off delete the
-# Secret redis-tls, restart the StatefulSet and create the cluster again. Then add
-# my-values.redis-tls.yml to the helm install.
+# Secret redis-tls (and the Certificates in redis-tls-certs.yaml), restart the
+# StatefulSet and create the cluster again. Then add my-values.redis-tls.yml to
+# the helm install.
 #
 # Image: valkey/valkey 8.1.12-alpine. It ships redis-server and redis-cli as
 # symlinks to valkey-server and valkey-cli, so the redis-* names are used below.

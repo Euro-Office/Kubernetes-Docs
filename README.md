@@ -497,7 +497,7 @@ kubectl -n <NS> exec deploy/docservice -c docservice -- \
 For trying the Redis modes and failover, `demo/` contains test manifests for
 standalone Redis, Redis Sentinel (`redis-sentinel.yaml`) and Redis Cluster
 (`redis-cluster.yaml`), with matching values overlays. They are for testing only
-(no persistence). TLS with a private CA is available through `demo/redis-tls.sh`. See [demo/Readme.md](demo/Readme.md).
+(no persistence). TLS with a private CA is available through cert-manager resources (`demo/redis-tls-certs.yaml`). See [demo/Readme.md](demo/Readme.md).
 
 #### Redis TLS
 
