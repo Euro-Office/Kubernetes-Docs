@@ -567,6 +567,40 @@ For test-specific trust, `tests.extraEnvVars` can override
 only when its corresponding TLS flag is enabled. The test pod does not inherit
 unrelated application mounts or `local.json` settings.
 
+#### Switching an existing release to Redis TLS
+
+Do not switch Redis/Valkey to TLS-only first and upgrade the chart afterwards.
+The `pre-upgrade` Job (`templates/jobs/pre-upgrade.yaml`, script `stop.sh` from
+`templates/configmaps/pre-upgrade.yaml`) sends `PUT /internal/cluster/inactive`
+to the running Docservice, which still has the OLD configuration, and fails
+the upgrade with `The server could not be disabled` unless the answer is
+`true`. On a test cluster, a Docservice with plain connections and a TLS-only
+Redis logged `Redis is unavailable` at that moment and the Job failed. The Job
+runs when the version or the database changes, or always when the image tag has
+no numeric version (a digest or `latest`), see `upgrade.job.skipWhenUnchanged`.
+
+A safe order that keeps the old Docservice connected during the switch:
+
+1. Let Redis/Valkey accept plain and TLS connections on the data port: set
+   `port 6379` together with `tls-port <port>` and the certificate files, and
+   restart the nodes. Valkey serves both listeners at once; `port 0` disables
+   the plain one ([TLS in Valkey](https://valkey.io/topics/tls/)). Check
+   `tls-replication` (replica links), `tls-cluster` (Cluster bus) and, for
+   Sentinel, that Sentinel itself has TLS enabled: the Valkey documentation
+   does not describe a mixed plain/TLS mode for these, so switch each of them
+   for all nodes together and check the Redis log.
+2. Upgrade the chart with `connections.redisTLS: true` (and
+   `connections.redisSentinelTLS`, `connections.redisCAExistingSecret` as
+   needed). The Job still reaches Redis over the plain port, and the new
+   Pods connect with TLS.
+3. Run `helm test` to check the TLS connection, then set `port 0` and restart
+   the Redis/Valkey nodes (for Cluster one node at a time).
+
+If the plain port cannot be kept, upgrade with `--no-hooks` (or
+`upgrade.job.enabled: false`). The Job then does not stop the old Docservice
+or recreate the tables of a new schema, so use this only when the version and
+the database do not change. A fresh install with TLS is not affected.
+
 #### Redis authentication secrets
 
 Redis/Valkey supports password-only authentication and named ACL users for
