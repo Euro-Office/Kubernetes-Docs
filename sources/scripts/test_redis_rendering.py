@@ -897,5 +897,61 @@ class RedisTestHookNotes(unittest.TestCase):
         self.assertNotIn("Helm test", notes)
 
 
+class NoDuplicateEnvironmentNames(unittest.TestCase):
+    """Helm 4 applies hooks server-side, and the API server rejects a container with two env entries of one name."""
+
+    OVERLAYS = {
+        "defaults": [],
+        "demo": ["my-values.yml"],
+        "standalone": ["my-values.yml", "my-values.redis-standalone.yml"],
+        "data-only": ["my-values.yml", "my-values.redis-data-only.yml"],
+        "sentinel": ["my-values.yml", "my-values.redis-sentinel.yml"],
+        "cluster": ["my-values.yml", "my-values.redis-cluster.yml"],
+        "sentinel+tls": ["my-values.yml", "my-values.redis-sentinel.yml", "my-values.redis-tls.yml"],
+        "cluster+tls": ["my-values.yml", "my-values.redis-cluster.yml", "my-values.redis-tls.yml"],
+    }
+    USER_ENV = [{"name": "COMPANY_NAME", "value": "x"}, {"name": "JWT_ENABLED", "value": "true"}]
+
+    def render_overlays(self, files, extra):
+        extra.update({"adminpanel": {"enabled": True}, "tests": {"enabled": True}})
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as overrides:
+            json.dump(extra, overrides)
+            overrides.flush()
+            command = ["helm", "template", "env-test", str(CHART)]
+            for name in files:
+                command += ["-f", str(CHART / "demo" / name)]
+            return subprocess.run(command + ["-f", overrides.name], text=True, capture_output=True,
+                                  check=False, env=helm_env())
+
+    def duplicates(self, rendered):
+        found = []
+        for document in yaml.safe_load_all(rendered):
+            for env in environment_lists(document or {}):
+                names = [entry["name"] for entry in env or []]
+                found += ["%s/%s: %s" % (document["kind"], document["metadata"]["name"], n)
+                          for n in sorted(set(names)) if names.count(n) > 1]
+        return found
+
+    def test_no_duplicate_names(self):
+        for label, files in self.OVERLAYS.items():
+            for user_env in ([], self.USER_ENV):
+                with self.subTest(overlay=label, extraEnvVars=bool(user_env)):
+                    extra = {"docservice": {"extraEnvVars": user_env}} if user_env else {}
+                    result = self.render_overlays(files, extra)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(self.duplicates(result.stdout), [])
+
+    def test_user_values_win_in_the_configuration_pod(self):
+        result = self.render_overlays(["my-values.yml", "my-values.redis-standalone.yml"],
+                                      {"docservice": {"extraEnvVars": self.USER_ENV}})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        pods = [d for d in yaml.safe_load_all(result.stdout)
+                if d and d["kind"] == "Pod" and d["metadata"]["name"] == "test-redis-config"]
+        self.assertEqual(len(pods), 1)
+        env = {e["name"]: e["value"] for e in pods[0]["spec"]["containers"][0]["env"] if "value" in e}
+        self.assertEqual(env["COMPANY_NAME"], "x")
+        self.assertEqual(env["JWT_ENABLED"], "true")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -62,10 +62,19 @@ spec:
     resources: {{ toYaml .Values.tests.resources | nindent 6 }}
     command: ["bash", "/scripts/test_redis_config.sh"]
     env:
+    {{- /* docservice.extraEnvVars wins: a name defined there is not rendered here, because a duplicate env name is rejected by server-side apply (Helm 4). */}}
+    {{- $userEnvNames := list }}
+    {{- range .Values.docservice.extraEnvVars }}
+    {{- $userEnvNames = append $userEnvNames .name }}
+    {{- end }}
+    {{- if not (has "COMPANY_NAME" $userEnvNames) }}
     - name: COMPANY_NAME
       value: {{ .Values.product.name | quote }}
+    {{- end }}
+    {{- if not (has "JWT_ENABLED" $userEnvNames) }}
     - name: JWT_ENABLED
       value: "false"
+    {{- end }}
     {{- with (include "ds.redis.env" . | trim) }}
     {{- . | nindent 4 }}
     {{- end }}
