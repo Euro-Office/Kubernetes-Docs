@@ -13,10 +13,10 @@ metadata:
 {{- $_ := include "ds.editor.storage.validate" . }}
 data:
   APPLICATION_NAME: {{ .Values.product.name }}
-  {{- if ne (default "memory" .Values.docservice.editorDataStorage) "memory" }}
+  {{- if ne (include "ds.editor.dataStorage" .) "memory" }}
   EDITOR_DATA_STORAGE: editorDataRedis
   {{- end }}
-  {{- if ne (default (default "memory" .Values.docservice.editorDataStorage) .Values.docservice.editorStatStorage) "memory" }}
+  {{- if ne (include "ds.editor.statStorage" .) "memory" }}
   EDITOR_STAT_STORAGE: editorDataRedis
   {{- else if eq .Values.docservice.editorStatStorage "memory" }}
   EDITOR_STAT_STORAGE: editorDataMemory
@@ -28,8 +28,8 @@ data:
   DB_NAME: {{ .Values.connections.dbName }}
   REDIS_SERVER_HOST: {{ .Values.connections.redisHost }}
   REDIS_SERVER_PORT: {{ .Values.connections.redisPort | quote }}
-  REDIS_SERVER_TLS: {{ .Values.connections.redisTLS | quote }}
-  REDIS_SENTINEL_TLS: {{ .Values.connections.redisSentinelTLS | quote }}
+  REDIS_SERVER_TLS: {{ default "false" (include "ds.redis.tls" .) | quote }}
+  REDIS_SENTINEL_TLS: {{ default "false" (include "ds.redis.sentinel.tls" .) | quote }}
   REDIS_CONNECTOR_NAME: redis
   REDIS_SERVER_DB_NUM: {{ .Values.connections.redisDBNum | quote }}
   {{- if .Values.connections.redisClusterNodes }}

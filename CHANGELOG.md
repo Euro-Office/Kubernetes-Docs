@@ -24,6 +24,7 @@
 
 ### Changes
 
+* The Redis flags `connections.redisTLS`, `connections.redisSentinelTLS`, `connections.redisNoPass` and `connections.redisSentinelNoPass` are parsed like the DocumentServer entrypoint does (`true`/`yes`/`y`/`on`/`1` and `false`/`no`/`n`/`off`/`0`, case-insensitive; empty means unset). Before, the string `"false"` (for example from `--set-string`) was taken as true: `redisNoPass: "false"` dropped the password and `redisTLS: "false"` mounted the CA with TLS off. Other values now fail the render. The editor storage modes are computed in one place (`ds.editor.dataStorage` and `ds.editor.statStorage`); renders for boolean values are unchanged
 * The Converter no longer receives Redis credentials or the Redis CA: it does not use Redis. Only the Docservice, Adminpanel and the test Pods do. The Redis usernames (`REDIS_SERVER_USER`, `REDIS_SENTINEL_USER`) moved from the shared `documentserver` ConfigMap to the env of the Redis-using Pods, because the entrypoint rejects a Sentinel user without a password. All Pods that use the ConfigMap and the Converter Pods restart once on upgrade
 * The Redis password environment variables are now rendered by shared helpers in all workloads and in the test Pod
 * The test Pod selects the Redis mode from `REDIS_SENTINEL_NODES` and `REDIS_CLUSTER_NODES` instead of `REDIS_CONNECTOR_NAME`

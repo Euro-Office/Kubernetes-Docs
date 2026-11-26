@@ -658,5 +658,137 @@ class RedisImageVersionGate(unittest.TestCase):
         self.assertRenders(self.STORAGE["standalone"], "v9.3.8", docservice_tag="v99.0.0")
 
 
+class StorageModeConsistency(unittest.TestCase):
+    """Everything that depends on the editor storage modes agrees with the modes computed from the values."""
+
+    CONNECTIONS = {
+        "memory": {},
+        "standalone": {"redisPassword": "x"},
+        "sentinel": {"redisPassword": "x", "redisSentinelNodes": ["s1:26379"]},
+        "cluster": {"redisPassword": "x", "redisClusterNodes": ["c1:6379"]},
+    }
+
+    def combinations(self):
+        for data in (None, "memory", "standalone", "sentinel", "cluster"):
+            for stat in (None, "memory", "same"):
+                if stat == "same":
+                    if data is None:
+                        continue
+                    stat = data
+                yield data, stat
+
+    def values(self, data, stat):
+        effective_data = data or "memory"
+        effective_stat = stat or effective_data
+        topology = next((m for m in (effective_data, effective_stat) if m != "memory"), "memory")
+        docservice = {}
+        if data is not None:
+            docservice["editorDataStorage"] = data
+        if stat is not None:
+            docservice["editorStatStorage"] = stat
+        return {"docservice": docservice, "connections": self.CONNECTIONS[topology]}, effective_data, effective_stat
+
+    def notes(self, values):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as overrides:
+            json.dump(values, overrides)
+            overrides.flush()
+            result = subprocess.run(
+                ["helm", "install", "notes-test", str(CHART), "--dry-run=client", "-f", overrides.name],
+                text=True, capture_output=True, check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_modes_agree_everywhere(self):
+        for data, stat in self.combinations():
+            with self.subTest(data=data, stat=stat):
+                values, effective_data, effective_stat = self.values(data, stat)
+                redis = "memory" != effective_data or "memory" != effective_stat
+                result = render(values)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                documents = [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+                config = next(doc["data"] for doc in documents if doc["metadata"]["name"] == "documentserver")
+                self.assertEqual(config.get("EDITOR_DATA_STORAGE"), "editorDataRedis" if effective_data != "memory" else None)
+                if effective_stat != "memory":
+                    expected_stat = "editorDataRedis"
+                else:
+                    expected_stat = "editorDataMemory" if stat == "memory" else None
+                self.assertEqual(config.get("EDITOR_STAT_STORAGE"), expected_stat)
+                hook = [doc for doc in documents if doc["kind"] == "Pod" and doc["metadata"]["name"] == "test-redis-config"]
+                self.assertEqual(bool(hook), redis)
+                docservice = next(doc for doc in documents if doc["kind"] == "Deployment" and doc["metadata"]["name"] == "docservice")
+                names = {e["name"] for env in environment_lists(docservice) for e in env}
+                self.assertEqual("REDIS_SERVER_PWD" in names, redis)
+                warning = MemoryMultiReplicaWarning.WARNING in self.notes(values)
+                self.assertEqual(warning, effective_data == "memory")
+
+
+class RedisBooleanParsing(unittest.TestCase):
+    """The Redis flags are parsed like the DocumentServer entrypoint (build/scripts/lib/bool.sh)."""
+
+    STANDALONE = {"docservice": {"editorDataStorage": "standalone"}, "connections": {"redisPassword": "x"}}
+    SENTINEL = {"docservice": {"editorDataStorage": "sentinel"},
+                "connections": {"redisPassword": "x", "redisSentinelNodes": ["s1:26379"],
+                                "redisSentinelPassword": "y"}}
+
+    def values(self, base, **connections):
+        return {"docservice": dict(base["docservice"]), "connections": {**base["connections"], **connections}}
+
+    def documents(self, values):
+        result = render(values)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return [doc for doc in yaml.safe_load_all(result.stdout) if doc]
+
+    def docservice(self, documents):
+        return next(doc for doc in documents if doc["kind"] == "Deployment" and doc["metadata"]["name"] == "docservice")
+
+    def env_names(self, documents):
+        return {e["name"] for env in environment_lists(self.docservice(documents)) for e in env}
+
+    def test_true_strings(self):
+        for text in ("True", "yes", "1", "on", " Y ", "TRUE"):
+            with self.subTest(redisTLS=text):
+                documents = self.documents(self.values(self.STANDALONE, redisTLS=text, redisCAExistingSecret="ca"))
+                config = next(doc["data"] for doc in documents if doc["metadata"]["name"] == "documentserver")
+                self.assertEqual(config["REDIS_SERVER_TLS"], "true")
+                self.assertEqual(config["REDIS_SENTINEL_TLS"], "false")
+                self.assertIn("NODE_EXTRA_CA_CERTS", self.env_names(documents))
+                volumes = self.docservice(documents)["spec"]["template"]["spec"]["volumes"]
+                self.assertIn("redis-ca-certificates", [v["name"] for v in volumes])
+
+    def test_false_strings_do_not_enable_tls(self):
+        for text in ("false", "No", "0", "off", " N ", ""):
+            with self.subTest(redisTLS=text):
+                result = render(self.values(self.STANDALONE, redisTLS=text, redisCAExistingSecret="ca"))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("redisCAExistingSecret is set", result.stderr)
+                documents = self.documents(self.values(self.STANDALONE, redisTLS=text))
+                config = next(doc["data"] for doc in documents if doc["metadata"]["name"] == "documentserver")
+                self.assertEqual(config["REDIS_SERVER_TLS"], "false")
+
+    def test_unrecognised_values_fail(self):
+        for name, base in (("redisTLS", self.STANDALONE), ("redisSentinelTLS", self.STANDALONE),
+                           ("redisNoPass", self.STANDALONE), ("redisSentinelNoPass", self.SENTINEL)):
+            with self.subTest(flag=name):
+                result = render(self.values(base, **{name: "maybe"}))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("connections.%s must be a boolean (true/false), got \"maybe\"." % name, result.stderr)
+
+    def test_no_pass_strings(self):
+        for text, present in (("false", True), ("False", True), ("true", False), ("YES", False), (True, False), (False, True)):
+            with self.subTest(redisNoPass=text):
+                values = self.values(self.STANDALONE, redisNoPass=text)
+                if present is False:
+                    del values["connections"]["redisPassword"]
+                names = self.env_names(self.documents(values))
+                self.assertEqual("REDIS_SERVER_PWD" in names, present)
+
+    def test_sentinel_no_pass_strings(self):
+        for text, present in (("false", True), ("Off", True), ("true", False), ("1", False), (False, True)):
+            with self.subTest(redisSentinelNoPass=text):
+                names = self.env_names(self.documents(self.values(self.SENTINEL, redisSentinelNoPass=text)))
+                self.assertEqual("REDIS_SENTINEL_PWD" in names, present)
+
+
 if __name__ == "__main__":
     unittest.main()
