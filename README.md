@@ -303,6 +303,7 @@ $ kubectl create secret generic ds-amqp  -n <DOCS_NAMESPACE> --from-literal=pass
 
 ```yaml
 connections:
+  dbType: "postgres"           # postgres (default), mariadb, mysql, oracle, mssql or dameng
   dbHost: "10.0.0.10"          # host or IP reachable from the pods
   dbPort: "5432"
   dbName: "DB_NAME"            # the database must already exist
@@ -316,6 +317,7 @@ connections:
   redisExistingSecret: "ds-redis"
   redisSecretKeyName: "password"
 
+  amqpProto: "amqp"            # "amqps" for brokers that require TLS
   amqpHost: "rabbitmq.other-namespace.svc.cluster.local"
   amqpPort: "5672"
   amqpVhost: "/"
