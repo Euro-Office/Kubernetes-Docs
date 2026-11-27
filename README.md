@@ -1162,9 +1162,9 @@ example:
   including via `kubectl port-forward` or an Ingress. Set an absolute URL only
   if the Example app is served from a different host than Docs.
 - `EXAMPLE_URL` is resolved **by the server**. It must be a cluster-internal
-  address. If it is left unset, the app falls back to the address from the
-  incoming browser request, and the Converter then tries to download the document
-  from itself:
+  address. If it is left unset, the app falls back to `http://localhost/example/`,
+  and Docservice and Converter then try to download the document from
+  themselves:
 
   ```
   error downloadFile: url=http://localhost/example//download?fileName=new.docx
