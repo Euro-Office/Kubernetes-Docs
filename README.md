@@ -24,7 +24,7 @@ This repository contains a set of files to deploy Euro-Office Docs into a Kubern
   * [11. Change interface themes](#11-change-interface-themes)
     + [11.1 Create a ConfigMap containing a json file](#111-create-a-configmap-containing-a-json-file)
     + [11.2 Specify parameters when installing Euro-Office Docs](#112-specify-parameters-when-installing-euro-office-docs)
-  * [12. Connecting Amazon S3 bucket as a cache to Euro-Office Helm Docs](#12-connecting-amazon-s3-bucket-as-a-cache-to-euro-office-helm-docs)
+  * [12. Connecting an S3 bucket as a cache to Euro-Office Helm Docs](#12-connecting-an-s3-bucket-as-a-cache-to-euro-office-helm-docs)
 - [Deploy Euro-Office Docs](#deploy-euro-office-docs)
   * [1. Deploy the Euro-Office Docs license](#1-deploy-the-euro-office-docs-license)
     + [1.1 Create secret](#11-create-secret)
@@ -100,7 +100,7 @@ $ helm repo update
 
 ### 2. Install Persistent Storage
 
-*If you want to use [Amazon S3 as a cache](#12-connecting-amazon-s3-bucket-as-a-cache-to-euro-office-helm-docs), please skip this step.*
+*If you want to use [Amazon S3 as a cache](#12-connecting-an-s3-bucket-as-a-cache-to-euro-office-helm-docs), please skip this step.*
 
 Install NFS Server Provisioner
 
