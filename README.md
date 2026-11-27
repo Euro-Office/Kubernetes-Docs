@@ -515,9 +515,10 @@ persistence:
   storageS3: true
   runtimeConfig:
     enabled: false
-  customResources:
-    enabled: false
 ```
+
+and keep `customFonts.build`, `customDictionaries.build` and `customPlugins.build`
+at `false` (default), since custom builds always need a ReadWriteMany `ds-buffer`.
 
 `runtimeConfig.enabled=false` is safe when `adminpanel.enabled=false`, since
 nothing writes runtime configuration. **If you enable the Admin panel you must
