@@ -1710,8 +1710,17 @@ Common after a broker rolling restart. Check that the cluster reformed:
 $ kubectl exec BROKER_POD -- rabbitmq-diagnostics cluster_status
 ```
 
-Compare the error timestamps against the restart — messages that stop when the
-broker came back need no action.
+If conversions still fail after the broker is back, restart Docservice
+(`kubectl rollout restart deploy/docservice`). To avoid this on multi-replica
+brokers, switch Docs to quorum queues, see
+[3.1](#31-alternative-rabbitmq-cluster-operator).
+
+### `PRECONDITION_FAILED - inequivalent arg 'x-max-priority' for queue 'ds.converttaskN'`
+
+The queue already exists with different arguments, typically after changing
+`x-queue-type` in `local.json`. RabbitMQ does not change an existing queue's
+type. Delete the queue (`rabbitmqctl delete_queue <name>`) and restart Docservice
+and Converter so they recreate it. Messages still in the queue are lost.
 
 ### `Multi-Attach error for volume ... already exclusively attached to one node`
 
