@@ -537,9 +537,39 @@ $ aws s3 ls s3://BUCKET_NAME/files/ --recursive \
 An empty listing means the storage block is wrong even though nothing crashed.
 
 > Credentials placed in a ConfigMap are stored in plain text. For anything beyond
-> a test deployment, inject `accessKeyId` and `secretAccessKey` through
-> `docservice.extraEnvVars` and `converter.extraEnvVars` sourced from a secret
-> instead.
+> a test deployment, use one of these instead:
+>
+> - **Mount `local.json` from a Secret** instead of using `extraConf`, in both
+>   Docservice and Converter:
+>
+>   ```yaml
+>   podSecurityContext:
+>     docservice:
+>       fsGroup: 101
+>     converter:
+>       fsGroup: 101
+>   docservice:
+>     extraVolumes:
+>       - name: local-json
+>         secret:
+>           secretName: docs-local-json
+>           defaultMode: 0440
+>     extraVolumeMounts:
+>       - name: local-json
+>         mountPath: /etc/euro-office/documentserver/local.json
+>         subPath: local.json
+>         readOnly: true
+>   converter:
+>     # same extraVolumes and extraVolumeMounts as docservice
+>   ```
+>
+>   Changes to the Secret are not picked up automatically; restart Docservice
+>   and Converter after updating it.
+>
+> - **Set credentials as environment variables:** remove `accessKeyId` and
+>   `secretAccessKey` from `local.json` and set `AWS_ACCESS_KEY_ID` and
+>   `AWS_SECRET_ACCESS_KEY` from a Secret via `docservice.extraEnvVars` and
+>   `converter.extraEnvVars`.
 
 ## Deploy Euro-Office Docs
 
