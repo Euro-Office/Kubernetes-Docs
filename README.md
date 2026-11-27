@@ -361,11 +361,6 @@ $ kubectl run netcheck --rm -it --image=busybox:1.38 --restart=Never -- \
   sh -c "nc -zv -w 3 DB_HOST 5432; nc -zv -w 3 REDIS_HOST 6379; nc -zv -w 3 AMQP_HOST 5672"
 ```
 
-> On managed Kubernetes offerings, worker nodes often need to be explicitly
-> attached to the private network where your managed databases live, and that
-> attachment usually has to happen **when the node pool is created**. Adding it
-> later commonly requires replacing every node in the pool.
-
 ### 6. Deploy StatsD exporter
 
 *This step is optional. You can skip step [#6](#6-deploy-statsd-exporter) entirely if you don't want to run StatsD exporter*
