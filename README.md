@@ -1746,7 +1746,8 @@ are used lazily and are not exercised until a document is opened:
 
 1. `kubectl port-forward svc/documentserver 8082:8888` → welcome page loads
    (Docservice + Proxy).
-2. `helm test RELEASE_NAME` → chart's own dependency checks.
+2. `helm test RELEASE_NAME` → chart's own dependency checks. Note that the Redis
+   check does not use TLS and fails against a TLS-only Redis.
 3. Open, edit and close a document through the Example app or your integration →
    exercises Redis (session), the message broker (save task) and the database.
 4. Confirm objects appear in the S3 bucket, or in the `ds-files` PVC → storage.
