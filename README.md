@@ -1174,8 +1174,9 @@ example:
   `localhost` inside a pod is that pod, not your machine.
 
 The Example application is for testing only and should not be enabled in
-production. A real integration supplies its own callback URLs, subject to the same
-browser-facing versus server-facing distinction.
+production: once enabled, it is reachable through the Docs proxy at `/example/`
+without authentication. A real integration supplies its own callback URLs,
+subject to the same browser-facing versus server-facing distinction.
 
 ### 5.2 Metrics deployment (optional)
 To deploy metrics, set `metrics.enabled` to true:
