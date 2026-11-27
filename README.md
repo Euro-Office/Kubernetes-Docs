@@ -483,23 +483,15 @@ Using S3 as the cache lets you skip
     "region": "REGION",
     "endpoint": "https://S3_ENDPOINT/",
     "bucketName": "BUCKET_NAME",
-    "storageFolderName": "files",
-    "urlExpires": 604800,
     "accessKeyId": "ACCESS_KEY",
-    "secretAccessKey": "SECRET_KEY",
-    "sslEnabled": true,
-    "s3ForcePathStyle": false,
-    "externalHost": "",
-    "useDirectStorageUrls": false
+    "secretAccessKey": "SECRET_KEY"
   }
 }
 ```
 
-Then set `extraConf.configMap` and `extraConf.filename` accordingly.
-
-> **S3-compatible providers.** Set `s3ForcePathStyle: true` for most non-AWS
-> providers, which serve buckets as `https://endpoint/bucket` rather than
-> `https://bucket.endpoint`. Leave it `false` for Amazon S3.
+Then set `extraConf.configMap` and `extraConf.filename` accordingly. All other
+storage options and their defaults are in `default.json`
+(`/etc/euro-office/documentserver/default.json` in the image).
 
 **Step 2 — set `persistence.storageS3=true`.** This suppresses creation of the
 `ds-files` PVC.
