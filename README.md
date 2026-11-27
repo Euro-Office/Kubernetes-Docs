@@ -73,13 +73,7 @@ This repository contains a set of files to deploy Euro-Office Docs into a Kubern
 - Kubectl is installed on the cluster management host
 - Helm v3.15+ is installed on the cluster management host
 
-> **Note on memory:** the Kubernetes scheduler places pods based on resource
-> *requests*, not on actual usage. A cluster whose nodes are individually small
-> (under ~4 GB allocatable) can fail to schedule Docs pods with
-> `0/N nodes are available: N Insufficient memory` even when real memory usage is
-> low. If you hit this, either raise node size or lower the `requests` of Docs and
-> of your dependencies (RabbitMQ, Redis and database charts often request far more
-> than a small deployment needs). See
+> If Docs pods stay `Pending` with `Insufficient memory`, see
 > [Troubleshooting](#troubleshooting).
 
 ## Introduction
