@@ -100,16 +100,10 @@ spec:
           {{- if .Values.customPlugins.build }}
           - -p
           {{- end }}
-          {{- if or .Values.customPlugins.defaultPlugins.list (not .Values.customPlugins.defaultPlugins.enabled) (not .Values.customPlugins.marketplace.enabled) }}
-          env:
           {{- if or (not .Values.customPlugins.defaultPlugins.enabled) .Values.customPlugins.defaultPlugins.list }}
+          env:
           - name: PLUGINS_LIST_DEFAULT
             value: "false"
-          {{- end }}
-          {{- if not .Values.customPlugins.marketplace.enabled }}
-          - name: PLUGINS_MARKET_DISABLED
-            value: "true"
-          {{- end }}
           {{- end }}
           volumeMounts:
           {{- $context := . }}
