@@ -1730,13 +1730,14 @@ to a pod stuck `Terminating` on the old node, or to a ReadWriteOnce class being
 used where ReadWriteMany is required — see
 [section 12](#12-connecting-an-s3-bucket-as-a-cache-to-euro-office-helm-docs).
 
-### Pods stuck `Terminating` during node drains
+### Node drains stall or pods stay `Terminating`
 
-Managed Kubernetes providers treat nodes as immutable and replace them for
-upgrades and configuration changes. A drain honours PodDisruptionBudgets and pod
-grace periods, so a long `terminationGracePeriodSeconds` on **any** workload can
-stall a node replacement indefinitely. Check the grace periods of Docs and of your
-dependencies before a planned upgrade.
+A drain honours PodDisruptionBudgets and pod grace periods. A PodDisruptionBudget
+that cannot be satisfied blocks the drain indefinitely; a `preStop` hook that
+waits (for example the RabbitMQ Cluster Operator's quorum check) delays it up to
+the pod's `terminationGracePeriodSeconds`. The Docs workloads use 30 seconds by
+default. Check the budgets and grace periods of your dependencies before a
+planned upgrade.
 
 ### Verifying an installation end to end
 
