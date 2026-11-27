@@ -24,7 +24,7 @@ This repository contains a set of files to deploy Euro-Office Docs into a Kubern
   * [11. Change interface themes](#11-change-interface-themes)
     + [11.1 Create a ConfigMap containing a json file](#111-create-a-configmap-containing-a-json-file)
     + [11.2 Specify parameters when installing Euro-Office Docs](#112-specify-parameters-when-installing-euro-office-docs)
-  * [12. Connecting Amazon S3 bucket as a cache to Euro-Office Helm Docs](#12-connecting-amazon-s3-bucket-as-a-cache-to-euro-office-helm-docs)
+  * [12. Connecting an S3 bucket as a cache to Euro-Office Helm Docs](#12-connecting-an-s3-bucket-as-a-cache-to-euro-office-helm-docs)
 - [Deploy Euro-Office Docs](#deploy-euro-office-docs)
   * [1. Deploy the Euro-Office Docs license](#1-deploy-the-euro-office-docs-license)
     + [1.1 Create secret](#11-create-secret)
@@ -70,9 +70,12 @@ This repository contains a set of files to deploy Euro-Office Docs into a Kubern
 
 - Kubernetes version no lower than 1.19+ or OpenShift version no lower than 3.11+
 - A minimum of two worker nodes is required for the Kubernetes cluster
-- Resources for the cluster hosts: 4 CPU \ 8 GB RAM min
+- Resources for the cluster hosts: 4 CPU \ 8 GB RAM min **per node**
 - Kubectl is installed on the cluster management host
 - Helm v3.15+ is installed on the cluster management host
+
+> If Docs pods stay `Pending` with `Insufficient memory`, see
+> [Troubleshooting](#troubleshooting).
 
 ## Introduction
 
@@ -98,7 +101,7 @@ $ helm repo update
 
 ### 2. Install Persistent Storage
 
-*If you want to use [Amazon S3 as a cache](#12-connecting-amazon-s3-bucket-as-a-cache-to-euro-office-helm-docs), please skip this step.*
+*If you want to use [Amazon S3 as a cache](#12-connecting-an-s3-bucket-as-a-cache-to-euro-office-helm-docs), please skip this step.*
 
 Install NFS Server Provisioner
 
@@ -149,6 +152,65 @@ $ helm install rabbitmq --version 16.0.14 bitnami/rabbitmq \
 Note: Set the `metrics.enabled=true` to enable exposing RabbitMQ metrics to be gathered by Prometheus.
 
 See more details about installing RabbitMQ via Helm [here](https://github.com/bitnami/charts/tree/main/bitnami/rabbitmq#rabbitmq).
+
+#### 3.1 Alternative: RabbitMQ Cluster Operator
+
+Instead of the Helm chart, you can use the official
+[RabbitMQ Cluster Operator](https://github.com/rabbitmq/cluster-operator).
+
+**cert-manager is required.** Current operator releases ship admission webhooks
+whose certificates are issued by cert-manager. Installing the operator first
+produces:
+
+```
+no matches for kind "Certificate" in version "cert-manager.io/v1"
+ensure CRDs are installed first
+```
+
+Install cert-manager first, wait for all three of its deployments to be ready,
+then install the operator:
+
+```
+$ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/<CERT_MANAGER_VERSION>/cert-manager.yaml
+$ kubectl -n cert-manager rollout status deploy/cert-manager --timeout=180s
+$ kubectl -n cert-manager rollout status deploy/cert-manager-webhook --timeout=180s
+$ kubectl -n cert-manager rollout status deploy/cert-manager-cainjector --timeout=180s
+$ kubectl apply -f https://github.com/rabbitmq/cluster-operator/releases/download/<OPERATOR_VERSION>/cluster-operator.yml
+```
+
+If the operator pod stays in `ContainerCreating` after this, it was created before
+the certificates existed and is waiting on a secret volume. Delete the pod so the
+Deployment recreates it.
+
+Points worth knowing:
+
+- `spec.terminationGracePeriodSeconds` defaults to **7 days**. It is an upper
+  bound: the operator's `preStop` hook waits until quorum queues stay available
+  without this node, then drains it. Lowering the value bounds drain time but can
+  interrupt that check during rolling restarts. Keep the default when using
+  quorum queues.
+- Use an **odd** replica count. Scaling *down* is not supported by the operator.
+- **Replicas do not make Docs queues highly available.** Docs declares classic
+  queues, which live on one node. To replicate them, add to `local.json`
+  (via `extraConf`):
+
+```json
+  "rabbitmq": {
+    "queueconverttask":     {"options": {"arguments": {"x-queue-type": "quorum"}}},
+    "queueconvertresponse": {"options": {"arguments": {"x-queue-type": "quorum"}}},
+    "queueconvertdead":     {"options": {"arguments": {"x-queue-type": "quorum"}}},
+    "queuedelayed":         {"options": {"arguments": {"x-queue-type": "quorum"}}}
+  }
+```
+
+  An existing queue's type can't be changed. Delete the existing queues
+  (`rabbitmqctl delete_queue <name>`) and restart docservice and converter to
+  recreate them; messages still in those queues are lost. Quorum queues don't
+  support `maxPriority`, so conversion-task priorities are dropped. Verify with
+  `rabbitmqctl list_queues name type members`.
+- Credentials are generated into a secret named `CLUSTER-default-user`, with keys
+  `username` and `password` — not the key names the Docs chart defaults to.
+
 
 ### 4. Deploy Redis
 
@@ -217,6 +279,88 @@ Here `PERSISTENT_SIZE` is a size for the Database persistent volume. For example
 It's recommended to use at least 2Gi of persistent storage for every 100 active users of Euro-Office Docs.
 
 Note: Set the `metrics.enabled=true` to enable exposing Database metrics to be gathered by Prometheus. Also add the following parameters: `metrics.image.repository=bitnamilegacy/mysqld-exporter` and `metrics.image.tag=0.17.2-debian-12-r16`.
+
+
+### Using external or managed services (optional)
+
+Steps [3](#3-deploy-rabbitmq), [4](#4-deploy-redis) and [5](#5-deploy-database)
+install RabbitMQ, Redis and a database into your cluster. You can instead point
+Docs at services you already run — a managed database, a managed Redis-compatible
+cache, an existing message broker. The chart has **no subchart dependencies** for
+these, so there is nothing to disable: you only set the `connections.*` values.
+
+#### Create your own secrets
+
+The chart reads each password either from `connections.*Password` (the chart then
+creates the secret) or from an existing secret. `*ExistingSecret` names the secret;
+`*SecretKeyName` names the key **inside** it (defaults: `postgres-password`,
+`redis-password`, `rabbitmq-password`). Both must match what you created:
+
+```
+$ kubectl create secret generic ds-db    -n <DOCS_NAMESPACE> --from-literal=password='DB_PASSWORD'
+$ kubectl create secret generic ds-redis -n <DOCS_NAMESPACE> --from-literal=password='REDIS_PASSWORD'
+$ kubectl create secret generic ds-amqp  -n <DOCS_NAMESPACE> --from-literal=password='AMQP_PASSWORD'
+```
+
+```yaml
+connections:
+  dbType: "postgres"           # postgres (default), mariadb, mysql, oracle, mssql or dameng
+  dbHost: "10.0.0.10"          # host or IP reachable from the pods
+  dbPort: "5432"
+  dbName: "DB_NAME"            # the database must already exist
+  dbUser: "DB_USER"
+  dbExistingSecret: "ds-db"
+  dbSecretKeyName: "password"
+
+  redisHost: "10.0.0.11"
+  redisPort: "6379"
+  redisUser: "REDIS_USER"
+  redisExistingSecret: "ds-redis"
+  redisSecretKeyName: "password"
+
+  amqpProto: "amqp"            # "amqps" for brokers that require TLS
+  amqpHost: "rabbitmq.other-namespace.svc.cluster.local"
+  amqpPort: "5672"
+  amqpVhost: "/"
+  amqpUser: "AMQP_USER"
+  amqpExistingSecret: "ds-amqp"
+  amqpSecretKeyName: "password"
+```
+
+A mismatch between `*SecretKeyName` and the real key produces a pod that fails to
+start with a missing-key error, which is easy to misread as a wrong password.
+Check with:
+
+```
+$ kubectl get secret ds-db -o jsonpath='{.data}' | jq 'keys'
+```
+
+#### Services in another namespace
+
+If a dependency runs in a different namespace, use the fully qualified service
+name — `SERVICE.NAMESPACE.svc.cluster.local`. Secrets are **not** shared across
+namespaces, so copy the value into a secret in the Docs namespace:
+
+```
+$ kubectl create secret generic ds-amqp -n <DOCS_NAMESPACE> \
+  --from-literal=password="$(kubectl get secret SOURCE_SECRET -n OTHER_NS \
+      -o jsonpath='{.data.password}' | base64 -d)"
+```
+
+#### Managed Redis and TLS
+
+Many managed Redis-compatible services (including Valkey-based ones) require TLS.
+The chart exposes no TLS switch.
+
+#### Verify connectivity before installing
+
+Every dependency must be reachable **from inside a pod**, which is not the same as
+being reachable from your workstation:
+
+```
+$ kubectl run netcheck --rm -it --image=busybox:1.38 --restart=Never -- \
+  sh -c "nc -zv -w 3 DB_HOST 5432; nc -zv -w 3 REDIS_HOST 6379; nc -zv -w 3 AMQP_HOST 5672"
+```
 
 ### 6. Deploy StatsD exporter
 
@@ -324,8 +468,109 @@ Note: If you need to add interface themes after the Euro-Office Docs is already 
 and then run the `helm upgrade documentserver euro-office/docs --set extraThemes.configMap=custom-themes --set extraThemes.filename=custom-themes.json --no-hooks` command or
 `helm upgrade documentserver -f ./values.yaml euro-office/docs --no-hooks` if the parameters are specified in the `values.yaml` file.
 
-### 12. Connecting Amazon S3 bucket as a cache to Euro-Office Helm Docs
-In order to connect Amazon S3 bucket as a cache, you need to [create](#7-make-changes-to-node-config-configuration-files) a configuration file or edit the existing one in accordance with [this guide](https://helpcenter.euro-office.com/ru/installation/docs-connect-amazon.aspx) and change the value of the parameter `persistence.storageS3` to `true`. 
+### 12. Connecting an S3 bucket as a cache to Euro-Office Helm Docs
+
+Using S3 as the cache lets you skip
+[NFS Server Provisioner](#2-install-persistent-storage) for document storage.
+
+**Step 1 — provide the storage configuration.** Create a
+[ConfigMap](#7-make-changes-to-node-config-configuration-files) containing a
+`local.json` with a `storage` block:
+
+```json
+{
+  "storage": {
+    "name": "storage-s3",
+    "region": "REGION",
+    "endpoint": "https://S3_ENDPOINT/",
+    "bucketName": "BUCKET_NAME",
+    "accessKeyId": "ACCESS_KEY",
+    "secretAccessKey": "SECRET_KEY"
+  }
+}
+```
+
+Then set `extraConf.configMap` and `extraConf.filename` accordingly. All other
+storage options and their defaults are in `default.json`
+(`/etc/euro-office/documentserver/default.json` in the image).
+
+**Step 2 — set `persistence.storageS3=true`.** This suppresses creation of the
+`ds-files` PVC.
+
+**Step 3 — decide what to do about the remaining volumes.** `storageS3=true` alone
+does **not** make the deployment volume-free. Two PVCs may still be created:
+
+| PVC | Created when | Access mode needed |
+| --- | --- | --- |
+| `ds-runtime-config` | `persistence.runtimeConfig.enabled=true` (default) | ReadWriteMany — mounted by both Docservice and Converter |
+| `ds-buffer` | any of `customFonts.build`, `customDictionaries.build`, `customPlugins.build` is `true` | ReadWriteMany |
+
+If your storage class only offers **ReadWriteOnce** — which is the case for most
+cloud block storage — a multi-replica deployment cannot share `ds-runtime-config`,
+and pods will sit `Pending` or fail to attach the volume.
+
+For a deployment with **no shared filesystem at all**, use S3 together with:
+
+```yaml
+persistence:
+  storageS3: true
+  runtimeConfig:
+    enabled: false
+```
+
+and keep `customFonts.build`, `customDictionaries.build` and `customPlugins.build`
+at `false` (default), since custom builds always need a ReadWriteMany `ds-buffer`.
+
+`runtimeConfig.enabled=false` is safe when `adminpanel.enabled=false`, since
+nothing writes runtime configuration. **If you enable the Admin panel you must
+re-enable `runtimeConfig` and provide a ReadWriteMany storage class**, because the
+Admin panel writes settings that Docservice and Converter must both read.
+
+**Step 4 — verify.** Nothing touches the bucket until a document is opened, so a
+healthy pod list does not prove the storage configuration is correct. After
+opening and saving a document, confirm objects exist:
+
+```
+$ aws s3 ls s3://BUCKET_NAME/files/ --recursive \
+  --region REGION --endpoint-url https://S3_ENDPOINT
+```
+
+An empty listing means the storage block is wrong even though nothing crashed.
+
+> Credentials placed in a ConfigMap are stored in plain text. For anything beyond
+> a test deployment, use one of these instead:
+>
+> - **Mount `local.json` from a Secret** instead of using `extraConf`, in both
+>   Docservice and Converter:
+>
+>   ```yaml
+>   podSecurityContext:
+>     docservice:
+>       fsGroup: 101
+>     converter:
+>       fsGroup: 101
+>   docservice:
+>     extraVolumes:
+>       - name: local-json
+>         secret:
+>           secretName: docs-local-json
+>           defaultMode: 0440
+>     extraVolumeMounts:
+>       - name: local-json
+>         mountPath: /etc/euro-office/documentserver/local.json
+>         subPath: local.json
+>         readOnly: true
+>   converter:
+>     # same extraVolumes and extraVolumeMounts as docservice
+>   ```
+>
+>   Changes to the Secret are not picked up automatically; restart Docservice
+>   and Converter after updating it.
+>
+> - **Set credentials as environment variables:** remove `accessKeyId` and
+>   `secretAccessKey` from `local.json` and set `AWS_ACCESS_KEY_ID` and
+>   `AWS_SECRET_ACCESS_KEY` from a Secret via `docservice.extraEnvVars` and
+>   `converter.extraEnvVars`.
 
 ## Deploy Euro-Office Docs
 
@@ -1172,11 +1417,44 @@ $ helm install documentserver -f values.yaml euro-office/docs
 
 ### 5.1 Example deployment (optional)
 
-To deploy the example, set the `example.enabled` parameter to true:
+The Example application is a demo integration, useful for verifying an
+installation end to end. Enable it with `example.enabled=true`.
 
-```bash
-$ helm install documentserver euro-office/docs --set example.enabled=true
+The Example app needs **two different URLs**, and confusing them is the most
+common reason a document fails to open:
+
+```yaml
+example:
+  enabled: true
+  # Browser-facing: where the browser loads the editor from.
+  dsUrl: "http://DOCS_EXTERNAL_ADDRESS/"
+  extraEnvVars:
+    - name: EXAMPLE_URL
+      # Server-facing: where Docservice and Converter fetch and save files.
+      # Must resolve from inside the cluster.
+      value: "http://documentserver.NAMESPACE.svc.cluster.local:8888/example"
 ```
+
+- `dsUrl` is resolved **by the browser**. The default `"/"` works whenever the
+  Example app is opened through Docs itself (`http://DOCS_ADDRESS/example/`),
+  including via `kubectl port-forward` or an Ingress. Set an absolute URL only
+  if the Example app is served from a different host than Docs.
+- `EXAMPLE_URL` is resolved **by the server**. It must be a cluster-internal
+  address. If it is left unset, the app falls back to `http://localhost/example/`,
+  and Docservice and Converter then try to download the document from
+  themselves:
+
+  ```
+  error downloadFile: url=http://localhost/example//download?fileName=new.docx
+    attempt=1; code:ECONNREFUSED
+  ```
+
+  `localhost` inside a pod is that pod, not your machine.
+
+The Example application is for testing only and should not be enabled in
+production: once enabled, it is reachable through the Docs proxy at `/example/`
+without authentication. A real integration supplies its own callback URLs,
+subject to the same browser-facing versus server-facing distinction.
 
 ### 5.2 Metrics deployment (optional)
 To deploy metrics, set `metrics.enabled` to true:
@@ -1666,6 +1944,96 @@ $ kubectl exec deploy/docservice -c docservice -- curl -s --max-time 10 -X DELET
 ```
 
 `{"shutdown":true}` means the server is switched off, `{"shutdown":false}` means it is on. Repeat the first command to confirm that every Pod reports `false`. The server publishes the new state as soon as it accepts the `DELETE`, but it answers only after it finished the earlier switch-off, which can take a long time; that is why the command stops waiting after 10 seconds. Do not send the `DELETE` repeatedly. Restarting the docservice Pods also clears the state.
+
+## Troubleshooting
+
+### Pods stay `Pending` with `Insufficient memory`
+
+```
+0/3 nodes are available: 3 Insufficient memory.
+```
+
+The scheduler reserves based on `requests`, not on actual usage — `kubectl top
+nodes` can show plenty free while scheduling still fails. Compare the two:
+
+```
+$ kubectl describe nodes | grep -A8 "Allocated resources"
+$ kubectl top nodes
+```
+
+Lower the `requests` you set for Docs (none by default) or for your
+dependencies, or use larger nodes.
+
+Also check `limits`. Totals above 100% of node capacity are allowed, but if
+several containers claim their limit at once the kernel starts OOM-killing pods.
+Converter is memory-hungry when processing large documents; keep its memory limit
+below node capacity.
+
+### Documents fail to open, `ECONNREFUSED` on `localhost`
+
+```
+error downloadFile: url=http://localhost/... code:ECONNREFUSED
+postData error: url = http://localhost/...
+```
+
+The integration is telling Docs to fetch the file from `localhost`, which inside a
+pod means that pod. The calling application must supply a **cluster-resolvable**
+URL. For the Example app see [5.1](#51-example-deployment-optional).
+
+### `NOT_FOUND - queue 'ds.converttaskN' ... process is stopped by supervisor`
+
+The queue's home broker node is down or restarting. Docs declares classic queues,
+which live on a single node and are unavailable while that node is unavailable.
+Common after a broker rolling restart. Check that the cluster reformed:
+
+```
+$ kubectl exec BROKER_POD -- rabbitmq-diagnostics cluster_status
+```
+
+If conversions still fail after the broker is back, restart Docservice
+(`kubectl rollout restart deploy/docservice`). To avoid this on multi-replica
+brokers, switch Docs to quorum queues, see
+[3.1](#31-alternative-rabbitmq-cluster-operator).
+
+### `PRECONDITION_FAILED - inequivalent arg 'x-max-priority' for queue 'ds.converttaskN'`
+
+The queue already exists with different arguments, typically after changing
+`x-queue-type` in `local.json`. RabbitMQ does not change an existing queue's
+type. Delete the queue (`rabbitmqctl delete_queue <name>`) and restart Docservice
+and Converter so they recreate it. Messages still in the queue are lost.
+
+### `Multi-Attach error for volume ... already exclusively attached to one node`
+
+A ReadWriteOnce volume is still attached to the previous node. It normally clears
+once detachment completes, typically a few minutes. Persistent occurrences point
+to a pod stuck `Terminating` on the old node, or to a ReadWriteOnce class being
+used where ReadWriteMany is required — see
+[section 12](#12-connecting-an-s3-bucket-as-a-cache-to-euro-office-helm-docs).
+
+### Node drains stall or pods stay `Terminating`
+
+A drain honours PodDisruptionBudgets and pod grace periods. A PodDisruptionBudget
+that cannot be satisfied blocks the drain indefinitely; a `preStop` hook that
+waits (for example the RabbitMQ Cluster Operator's quorum check) delays it up to
+the pod's `terminationGracePeriodSeconds`. The Docs workloads use 30 seconds by
+default. Check the budgets and grace periods of your dependencies before a
+planned upgrade.
+
+### Verifying an installation end to end
+
+Pods reporting `Running` only proves the HTTP probes pass. Several dependencies
+are used lazily and are not exercised until a document is opened:
+
+1. `kubectl port-forward svc/documentserver 8082:8888` → welcome page loads
+   (Docservice + Proxy).
+2. `helm test RELEASE_NAME` → chart's own dependency checks. Note that the Redis
+   check does not use TLS and fails against a TLS-only Redis.
+3. Open, edit and close a document through the Example app or your integration →
+   exercises Redis (session), the message broker (save task) and the database.
+4. Confirm objects appear in the S3 bucket, or in the `ds-files` PVC → storage.
+
+Step 4 is the one most often skipped, and the only one that proves the storage
+configuration.
 
 ## Using Grafana to visualize metrics (optional)
 

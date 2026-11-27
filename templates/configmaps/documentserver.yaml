@@ -21,6 +21,7 @@ data:
   {{- else if eq .Values.docservice.editorStatStorage "memory" }}
   EDITOR_STAT_STORAGE: editorDataMemory
   {{- end }}
+  COMPANY_NAME: {{ .Values.product.name | quote }}
   DB_TYPE: {{ template "ds.db.type" . }}
   DB_USER: {{ .Values.connections.dbUser }}
   DB_HOST: {{ .Values.connections.dbHost }}
