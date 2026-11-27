@@ -290,9 +290,10 @@ these, so there is nothing to disable: you only set the `connections.*` values.
 
 #### Create your own secrets
 
-The chart reads each password from an existing secret. `*ExistingSecret` names the
-secret; `*SecretKeyName` names the key **inside** that secret. Both must match what
-you actually created:
+The chart reads each password either from `connections.*Password` (the chart then
+creates the secret) or from an existing secret. `*ExistingSecret` names the secret;
+`*SecretKeyName` names the key **inside** it (defaults: `postgres-password`,
+`redis-password`, `rabbitmq-password`). Both must match what you created:
 
 ```
 $ kubectl create secret generic ds-db    --from-literal=password='DB_PASSWORD'
