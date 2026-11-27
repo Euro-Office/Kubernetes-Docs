@@ -1157,9 +1157,10 @@ example:
       value: "http://documentserver.NAMESPACE.svc.cluster.local:8888/example"
 ```
 
-- `dsUrl` is resolved **by the browser**. If you are reaching Docs through
-  `kubectl port-forward`, this is your local address, e.g.
-  `http://localhost:8082/`. Behind an Ingress it is the public hostname.
+- `dsUrl` is resolved **by the browser**. The default `"/"` works whenever the
+  Example app is opened through Docs itself (`http://DOCS_ADDRESS/example/`),
+  including via `kubectl port-forward` or an Ingress. Set an absolute URL only
+  if the Example app is served from a different host than Docs.
 - `EXAMPLE_URL` is resolved **by the server**. It must be a cluster-internal
   address. If it is left unset, the app falls back to the address from the
   incoming browser request, and the Converter then tries to download the document
