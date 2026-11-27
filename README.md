@@ -357,8 +357,8 @@ Every dependency must be reachable **from inside a pod**, which is not the same 
 being reachable from your workstation:
 
 ```
-$ kubectl run netcheck --rm -it --image=busybox --restart=Never -- \
-  sh -c "nc -zv DB_HOST 5432; nc -zv REDIS_HOST 6379; nc -zv AMQP_HOST 5672"
+$ kubectl run netcheck --rm -it --image=busybox:1.38 --restart=Never -- \
+  sh -c "nc -zv -w 3 DB_HOST 5432; nc -zv -w 3 REDIS_HOST 6379; nc -zv -w 3 AMQP_HOST 5672"
 ```
 
 > On managed Kubernetes offerings, worker nodes often need to be explicitly
