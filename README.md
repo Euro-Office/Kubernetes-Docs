@@ -189,6 +189,24 @@ Points worth knowing:
   interrupt that check during rolling restarts. Keep the default when using
   quorum queues.
 - Use an **odd** replica count. Scaling *down* is not supported by the operator.
+- **Replicas do not make Docs queues highly available.** Docs declares classic
+  queues, which live on one node. To replicate them, add to `local.json`
+  (via `extraConf`):
+
+```json
+  "rabbitmq": {
+    "queueconverttask":     {"options": {"arguments": {"x-queue-type": "quorum"}}},
+    "queueconvertresponse": {"options": {"arguments": {"x-queue-type": "quorum"}}},
+    "queueconvertdead":     {"options": {"arguments": {"x-queue-type": "quorum"}}},
+    "queuedelayed":         {"options": {"arguments": {"x-queue-type": "quorum"}}}
+  }
+```
+
+  An existing queue's type can't be changed. Delete the existing queues
+  (`rabbitmqctl delete_queue <name>`) and restart docservice and converter to
+  recreate them; messages still in those queues are lost. Quorum queues don't
+  support `maxPriority`, so conversion-task priorities are dropped. Verify with
+  `rabbitmqctl list_queues name type members`.
 - Credentials are generated into a secret named `CLUSTER-default-user`, with keys
   `username` and `password` — not the key names the Docs chart defaults to.
 
