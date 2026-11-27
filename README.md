@@ -1681,7 +1681,8 @@ $ kubectl describe nodes | grep -A8 "Allocated resources"
 $ kubectl top nodes
 ```
 
-Lower the `requests` of Docs or of your dependencies, or use larger nodes.
+Lower the `requests` you set for Docs (none by default) or for your
+dependencies, or use larger nodes.
 
 Also check `limits`. Totals above 100% of node capacity are allowed, but if
 several containers claim their limit at once the kernel starts OOM-killing pods.
