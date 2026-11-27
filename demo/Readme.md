@@ -216,7 +216,7 @@ sudo rm -rf /tmp/euro-office-shared
 
 This setup is for local testing only:
 
-- All passwords (`onlyoffice`, `redis`, `rabbit`, JWT secret) are dev placeholders — never use them in production
+- All passwords (`eurooffice`, `redis`, `rabbit`, JWT secret) are dev placeholders — never use them in production
 - The shared host volume at `/tmp/euro-office-shared` only works because k3d nodes run on a single host; in a real cluster, replace `storage.yaml` with proper NFS or another RWX provisioner
 - Single-replica databases with no backups
 - No TLS, no ingress, port-forwarding only
