@@ -502,7 +502,7 @@ does **not** make the deployment volume-free. Two PVCs may still be created:
 | PVC | Created when | Access mode needed |
 | --- | --- | --- |
 | `ds-runtime-config` | `persistence.runtimeConfig.enabled=true` (default) | ReadWriteMany — mounted by both Docservice and Converter |
-| `ds-custom-resources` | any of `customFonts.build`, `customDictionaries.build`, `customPlugins.build` is `true` | ReadWriteMany |
+| `ds-buffer` | any of `customFonts.build`, `customDictionaries.build`, `customPlugins.build` is `true` | ReadWriteMany |
 
 If your storage class only offers **ReadWriteOnce** — which is the case for most
 cloud block storage — a multi-replica deployment cannot share `ds-runtime-config`,
