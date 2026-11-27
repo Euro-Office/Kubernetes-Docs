@@ -32,6 +32,13 @@ This repository contains a set of files to deploy Euro-Office Docs into a Kubern
   * [2. Deploy Euro-Office Docs](#2-deploy-euro-office-docs)
   * [3. Uninstall Euro-Office Docs](#3-uninstall-euro-office-docs)
   * [4. Parameters](#4-parameters)
+    + [Editor data and statistics storage](#editor-data-and-statistics-storage)
+    + [Memory storage and multiple DocService replicas](#memory-storage-and-multiple-docservice-replicas)
+    + [Redis editor storage image requirement](#redis-editor-storage-image-requirement)
+    + [Redis test installs](#redis-test-installs)
+    + [Redis TLS](#redis-tls)
+    + [Switching an existing release to Redis TLS](#switching-an-existing-release-to-redis-tls)
+    + [Redis authentication secrets](#redis-authentication-secrets)
   * [5. Configuration and installation details](#5-configuration-and-installation-details)
   * [5.1 Example deployment (optional)](#51-example-deployment-optional)
   * [5.2 Metrics deployment (optional)](#52-metrics-deployment-optional)
@@ -231,6 +238,8 @@ Note: Set the `metrics.enabled=true` to enable exposing Redis metrics to be gath
 
 See more details about installing Redis via Helm [here](https://github.com/bitnami/charts/tree/main/bitnami/redis).
 
+Note: Redis is only used when `docservice.editorDataStorage` or `docservice.editorStatStorage` is not `memory`. The default is `memory`, which needs no Redis. The command above installs a standalone Redis. For more than one DocService replica, select a Redis storage mode, see [Editor data and statistics storage](#editor-data-and-statistics-storage) and [Memory storage and multiple DocService replicas](#memory-storage-and-multiple-docservice-replicas). For Redis Sentinel, Redis Cluster or TLS test installs, see [Redis test installs](#redis-test-installs). Redis editor storage also needs a DocumentServer image that supports it, see [Redis editor storage image requirement](#redis-editor-storage-image-requirement).
+
 ### 5. Deploy Database
 
 As a database server, you can use PostgreSQL, MySQL or MariaDB
@@ -350,7 +359,13 @@ $ kubectl create secret generic ds-amqp -n <DOCS_NAMESPACE> \
 #### Managed Redis and TLS
 
 Many managed Redis-compatible services (including Valkey-based ones) require TLS.
-The chart exposes no TLS switch.
+Enable TLS with `connections.redisTLS` (and `connections.redisSentinelTLS` for Sentinel discovery),
+and add a private CA with `connections.redisCAExistingSecret` if the service does not use a
+publicly trusted certificate. TLS needs a DocumentServer image with Redis editor storage support.
+See [Redis TLS](#redis-tls) and [Redis editor storage image requirement](#redis-editor-storage-image-requirement).
+Select the topology of the managed service with `docservice.editorDataStorage` and
+`docservice.editorStatStorage` (`standalone`, `sentinel` or `cluster`), and set the matching
+`connections.redisHost`/`redisPort`, `redisSentinelNodes` or `redisClusterNodes`.
 
 #### Verify connectivity before installing
 
@@ -1662,6 +1677,8 @@ $ kubectl scale -n default deployment docservice --replicas=POD_COUNT
 ```
 
 where `POD_COUNT` is a number of the `docservice` pods.
+
+Note: with more than one `docservice` pod, use a Redis editor storage mode instead of the default `memory`, see [Memory storage and multiple DocService replicas](#memory-storage-and-multiple-docservice-replicas).
 
 Do the same to scale the `converter` deployment:
 
