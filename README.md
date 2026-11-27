@@ -166,15 +166,15 @@ no matches for kind "Certificate" in version "cert-manager.io/v1"
 ensure CRDs are installed first
 ```
 
-Install cert-manager, wait for all three of its deployments to be ready, then
-install the operator and re-apply:
+Install cert-manager first, wait for all three of its deployments to be ready,
+then install the operator:
 
 ```
-$ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
+$ kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/<CERT_MANAGER_VERSION>/cert-manager.yaml
 $ kubectl -n cert-manager rollout status deploy/cert-manager --timeout=180s
 $ kubectl -n cert-manager rollout status deploy/cert-manager-webhook --timeout=180s
 $ kubectl -n cert-manager rollout status deploy/cert-manager-cainjector --timeout=180s
-$ kubectl apply -f https://github.com/rabbitmq/cluster-operator/releases/latest/download/cluster-operator.yml
+$ kubectl apply -f https://github.com/rabbitmq/cluster-operator/releases/download/<OPERATOR_VERSION>/cluster-operator.yml
 ```
 
 If the operator pod stays in `ContainerCreating` after this, it was created before
