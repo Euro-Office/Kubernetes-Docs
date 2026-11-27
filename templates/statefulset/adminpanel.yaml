@@ -108,17 +108,11 @@ spec:
               name: {{ tpl .Values.connections.amqpUserExistingSecret $ }}
               key: {{ .Values.connections.amqpUserSecretKeyName }}
         {{- end }}
-        - name: REDIS_SERVER_PWD
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "ds.redis.secretName" . }}
-              key: {{ .Values.connections.redisSecretKeyName }}
-        {{- if eq .Values.connections.redisConnectorName "ioredis" }}
-        - name: REDIS_SENTINEL_PWD
-          valueFrom:
-            secretKeyRef:
-              name: {{ template "ds.redis.sentinel.secretName" . }}
-              key: {{ .Values.connections.redisSentinelSecretKeyName }}
+        {{- with (include "ds.redis.env" . | trim) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+        {{- with (include "ds.redis.ca.env" (dict "context" . "extraEnvVars" .Values.adminpanel.extraEnvVars) | trim) }}
+        {{- . | nindent 8 }}
         {{- end }}
         {{- with .Values.adminpanel.extraEnvVars }}
         {{- toYaml . | nindent 8 }}
@@ -168,6 +162,9 @@ spec:
           {{- with .Values.adminpanel.extraVolumeMounts }}
           {{- toYaml . | nindent 10 }}
           {{- end }}
+          {{- with (include "ds.redis.ca.mount" . | trim) }}
+          {{- . | nindent 10 }}
+          {{- end }}
       volumes:
         {{- if not .Values.persistence.storageS3 }}
         - name: ds-files
@@ -194,5 +191,8 @@ spec:
         {{- end }}
         {{- with .Values.adminpanel.extraVolumes }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with (include "ds.redis.ca.volume" . | trim) }}
+        {{- . | nindent 8 }}
         {{- end }}
 {{- end }}

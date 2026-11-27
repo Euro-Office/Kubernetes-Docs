@@ -1,0 +1,106 @@
+{{- if and .Values.tests.enabled (eq (include "ds.redis.enabled" .) "true") }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "test-redis-config") }}
+  namespace: {{ include "ds.namespace" . | quote }}
+  labels:
+    app.kubernetes.io/component: test-redis-config
+    {{- if .Values.commonLabels }}
+    {{- include "ds.labels.commonLabels" . | trim | nindent 4 }}
+    {{- end }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-weight": "2"
+    "helm.sh/hook-delete-policy": before-hook-creation
+    {{- if or .Values.commonAnnotations .Values.tests.annotations }}
+    {{- $dictValue := default .Values.commonAnnotations .Values.tests.annotations }}
+    {{- include "ds.annotations.commonAnnotations" ( dict "keyName" $dictValue "context" $ ) | nindent 4 }}
+    {{- end }}
+spec:
+  serviceAccountName: {{ include "ds.serviceAccountName" . }}
+  {{- if .Values.podSecurityContext.enabled }}
+  securityContext: {{- toYaml .Values.podSecurityContext.tests | nindent 4 }}
+  {{- end }}
+  restartPolicy: Never
+  {{- if or .Values.tests.customPodAntiAffinity .Values.tests.podAffinity .Values.tests.nodeAffinity }}
+  affinity:
+    {{- with .Values.tests.customPodAntiAffinity }}
+    podAntiAffinity:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.tests.podAffinity }}
+    podAffinity:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .Values.tests.nodeAffinity }}
+    nodeAffinity:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .Values.nodeSelector .Values.tests.nodeSelector }}
+  nodeSelector: {{ toYaml (default .Values.nodeSelector .Values.tests.nodeSelector) | nindent 4 }}
+  {{- end }}
+  {{- if or .Values.tolerations .Values.tests.tolerations }}
+  tolerations: {{ toYaml (default .Values.tolerations .Values.tests.tolerations) | nindent 4 }}
+  {{- end }}
+  {{- if .Values.imagePullSecrets }}
+  imagePullSecrets:
+  - name: {{ .Values.imagePullSecrets }}
+  {{- end }}
+  {{- with .Values.tests.initContainers }}
+  initContainers:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  containers:
+  - name: redis-config
+    image: {{ .Values.docservice.image.repository }}:{{ default .Values.images.tag .Values.docservice.image.tag }}
+    imagePullPolicy: {{ .Values.docservice.image.pullPolicy }}
+    {{- if .Values.tests.containerSecurityContext.enabled }}
+    securityContext: {{- omit .Values.tests.containerSecurityContext "enabled" | toYaml | nindent 6 }}
+    {{- end }}
+    resources: {{ toYaml .Values.tests.resources | nindent 6 }}
+    command: ["bash", "/scripts/test_redis_config.sh"]
+    env:
+    {{- /* docservice.extraEnvVars wins: a name defined there is not rendered here, because a duplicate env name is rejected by server-side apply (Helm 4). */}}
+    {{- $userEnvNames := list }}
+    {{- range .Values.docservice.extraEnvVars }}
+    {{- $userEnvNames = append $userEnvNames .name }}
+    {{- end }}
+    {{- if not (has "COMPANY_NAME" $userEnvNames) }}
+    - name: COMPANY_NAME
+      value: {{ .Values.product.name | quote }}
+    {{- end }}
+    {{- if not (has "JWT_ENABLED" $userEnvNames) }}
+    - name: JWT_ENABLED
+      value: "false"
+    {{- end }}
+    {{- with (include "ds.redis.env" . | trim) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+    {{- with .Values.docservice.extraEnvVars }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+    envFrom:
+    - configMapRef:
+        name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "documentserver") }}
+    volumeMounts:
+    - name: test-redis-config
+      mountPath: /scripts/test_redis_config.sh
+      subPath: test_redis_config.sh
+    {{- if .Values.extraConf.configMap }}
+    - name: custom-file
+      mountPath: /etc/{{ .Values.product.name }}/documentserver/{{ .Values.extraConf.filename }}
+      subPath: {{ .Values.extraConf.filename }}
+    {{- end }}
+  volumes:
+  - name: test-redis-config
+    configMap:
+      name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "test-redis-config") }}
+      defaultMode: 0755
+  {{- if .Values.extraConf.configMap }}
+  - name: custom-file
+    configMap:
+      name: {{ .Values.extraConf.configMap }}
+  {{- end }}
+{{- end }}

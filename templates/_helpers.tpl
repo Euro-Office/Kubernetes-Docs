@@ -12,6 +12,145 @@ Check the DB type
 {{- end -}}
 
 {{/*
+Effective editor data storage mode: docservice.editorDataStorage, or memory when it is empty.
+The only place that applies this default.
+*/}}
+{{- define "ds.editor.dataStorage" -}}
+{{- default "memory" .Values.docservice.editorDataStorage -}}
+{{- end -}}
+
+{{/*
+Effective editor statistics storage mode: docservice.editorStatStorage, or the effective data storage mode
+when it is empty. The only place that applies this default.
+*/}}
+{{- define "ds.editor.statStorage" -}}
+{{- default (include "ds.editor.dataStorage" .) .Values.docservice.editorStatStorage -}}
+{{- end -}}
+
+{{/*
+Parse a boolean flag. Call with (dict "value" <value> "name" "<connections.x>"). Returns "true" or an empty
+string. Mirrors build/scripts/lib/bool.sh of DocumentServer, which reads the same settings in the entrypoint:
+true/yes/y/on/1 and false/no/n/off/0, case-insensitive, surrounding whitespace ignored. A real boolean, nil
+and an empty string are accepted too (empty means unset, that is false). Any other value fails, so that for
+example the string "false" is never taken as true.
+*/}}
+{{- define "ds.bool" -}}
+{{- $value := .value -}}
+{{- if kindIs "bool" $value -}}
+  {{- if $value -}}true{{- end -}}
+{{- else if not (kindIs "invalid" $value) -}}
+  {{- $text := lower (trim (toString $value)) -}}
+  {{- if has $text (list "true" "yes" "y" "on" "1") -}}
+    true
+  {{- else if and (ne $text "") (not (has $text (list "false" "no" "n" "off" "0"))) -}}
+    {{- fail (printf "%s must be a boolean (true/false), got %q." .name $text) -}}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/* The Redis flags, parsed with ds.bool: "true" or an empty string. */}}
+{{- define "ds.redis.tls" -}}{{- include "ds.bool" (dict "value" .Values.connections.redisTLS "name" "connections.redisTLS") -}}{{- end -}}
+{{- define "ds.redis.sentinel.tls" -}}{{- include "ds.bool" (dict "value" .Values.connections.redisSentinelTLS "name" "connections.redisSentinelTLS") -}}{{- end -}}
+{{- define "ds.redis.noPass" -}}{{- include "ds.bool" (dict "value" .Values.connections.redisNoPass "name" "connections.redisNoPass") -}}{{- end -}}
+{{- define "ds.redis.sentinel.noPass" -}}{{- include "ds.bool" (dict "value" .Values.connections.redisSentinelNoPass "name" "connections.redisSentinelNoPass") -}}{{- end -}}
+
+{{/*
+Whether DocService uses Redis: true when editor data or editor statistics storage is a Redis mode
+(standalone, sentinel or cluster).
+*/}}
+{{- define "ds.redis.enabled" -}}
+{{- $dataStorage := include "ds.editor.dataStorage" . -}}
+{{- $statStorage := include "ds.editor.statStorage" . -}}
+{{- if or (ne $dataStorage "memory") (ne $statStorage "memory") -}}true{{- end -}}
+{{- end -}}
+
+{{/*
+Whether editor data is kept in memory while more than one DocService Pod can run (replicas > 1 or autoscaling).
+In memory mode the co-editing state is per Pod and the chart has no document-affinity routing.
+*/}}
+{{- define "ds.editor.memoryMultiReplica" -}}
+{{- $dataStorage := include "ds.editor.dataStorage" . -}}
+{{- if and (eq $dataStorage "memory") (or (gt (int .Values.docservice.replicas) 1) .Values.docservice.autoscaling.enabled) -}}true{{- end -}}
+{{- end -}}
+
+{{/*
+Minimum DocumentServer version that supports Redis editor storage and the Redis TLS settings
+(Euro-Office/DocumentServer PR #386). Empty until that DocumentServer release is tagged; while empty the
+version gate in ds.editor.storage.validate is inactive. Set it to the released version (e.g. "X.Y.Z") when
+chart and image are released together.
+*/}}
+{{- define "ds.redis.minImageVersion" -}}{{- end -}}
+
+{{/*
+Validate editor storage modes and their Redis topology requirements.
+*/}}
+{{- define "ds.editor.storage.validate" -}}
+{{- $allowed := list "memory" "standalone" "sentinel" "cluster" -}}
+{{- $dataStorage := include "ds.editor.dataStorage" . -}}
+{{- $statStorage := include "ds.editor.statStorage" . -}}
+{{- if and .Values.connections.redisClusterNodes .Values.connections.redisSentinelNodes -}}
+  {{- fail "Redis Cluster and Redis Sentinel nodes cannot be configured together." -}}
+{{- end -}}
+{{- if and (eq (include "ds.redis.enabled" .) "true") .Values.connections.redisSentinelNodes (not (include "ds.redis.sentinel.noPass" .)) -}}
+  {{- if and (empty .Values.connections.redisSentinelPassword) (empty .Values.connections.redisSentinelExistingSecret) -}}
+    {{- fail "Authenticated Redis Sentinel requires connections.redisSentinelPassword or connections.redisSentinelExistingSecret." -}}
+  {{- end -}}
+{{- end -}}
+{{- if not (has $dataStorage $allowed) -}}
+  {{- fail (printf "Unsupported editorDataStorage %q. Possible values are memory, standalone, sentinel or cluster." $dataStorage) -}}
+{{- end -}}
+{{- if not (has $statStorage $allowed) -}}
+  {{- fail (printf "Unsupported editorStatStorage %q. Possible values are memory, standalone, sentinel or cluster." $statStorage) -}}
+{{- end -}}
+{{- if and (ne $dataStorage "memory") (ne $statStorage "memory") (ne $dataStorage $statStorage) -}}
+  {{- fail "editorDataStorage and editorStatStorage must use the same Redis topology when both are not memory." -}}
+{{- end -}}
+{{- $redisStorage := $dataStorage -}}
+{{- if eq $redisStorage "memory" -}}
+  {{- $redisStorage = $statStorage -}}
+{{- end -}}
+{{- if eq $redisStorage "sentinel" -}}
+  {{- if not .Values.connections.redisSentinelNodes -}}
+    {{- fail "Redis Sentinel editor storage requires connections.redisSentinelNodes." -}}
+  {{- end -}}
+{{- else if eq $redisStorage "cluster" -}}
+  {{- if not .Values.connections.redisClusterNodes -}}
+    {{- fail "Redis Cluster editor storage requires connections.redisClusterNodes." -}}
+  {{- end -}}
+{{- else if eq $redisStorage "standalone" -}}
+  {{- if or .Values.connections.redisClusterNodes .Values.connections.redisSentinelNodes -}}
+    {{- fail "Standalone editor storage cannot be combined with Redis Cluster or Sentinel nodes." -}}
+  {{- end -}}
+{{- end -}}
+{{- if and (eq (include "ds.redis.enabled" .) "true") (not (include "ds.redis.noPass" .)) (empty .Values.connections.redisPassword) (empty .Values.connections.redisExistingSecret) -}}
+  {{- fail "Authenticated Redis requires connections.redisPassword or connections.redisExistingSecret." -}}
+{{- end -}}
+{{- if eq (include "ds.redis.enabled" .) "true" -}}
+  {{- $dbNum := toString (default "0" .Values.connections.redisDBNum) -}}
+  {{- if not (regexMatch "^[0-9]+$" $dbNum) -}}
+    {{- fail (printf "connections.redisDBNum must be a non-negative integer, got %q." $dbNum) -}}
+  {{- end -}}
+  {{- if and (eq $redisStorage "cluster") (ne (trimAll "0" $dbNum) "") -}}
+    {{- fail (printf "Redis Cluster supports only database 0; connections.redisDBNum is %q. Use a dedicated Cluster or a different key prefix to separate environments." $dbNum) -}}
+  {{- end -}}
+  {{- if and .Values.connections.redisCAExistingSecret (not (or (include "ds.redis.tls" .) (include "ds.redis.sentinel.tls" .))) -}}
+    {{- fail "connections.redisCAExistingSecret is set but connections.redisTLS and connections.redisSentinelTLS are both false: the CA would be ignored and Redis connections would not use TLS. Enable TLS or remove the CA secret." -}}
+  {{- end -}}
+{{- end -}}
+{{- $legacyConnector := toString (default "" .Values.connections.redisConnectorName) -}}
+{{- if and $legacyConnector (ne $legacyConnector "redis") -}}
+  {{- fail (printf "connections.redisConnectorName (%q) was removed in chart 8.0.0. For Redis Sentinel set docservice.editorDataStorage: sentinel and connections.redisSentinelNodes (and redisSentinelGroupName); see the 8.0.0 CHANGELOG. Remove redisConnectorName from your values." $legacyConnector) -}}
+{{- end -}}
+{{- $redisWanted := eq (include "ds.redis.enabled" .) "true" -}}
+{{- $minVersion := include "ds.redis.minImageVersion" . | trim -}}
+{{- $imageVersion := include "ds.versionGate.version" . -}}
+{{- if and $redisWanted $minVersion $imageVersion (semverCompare (printf "<%s-0" $minVersion) $imageVersion) -}}
+  {{- fail (printf "Redis editor storage requires DocumentServer %s or later, but the docservice image tag is %s. Use a newer image or set docservice.editorDataStorage/editorStatStorage to memory." $minVersion (default .Values.images.tag .Values.docservice.image.tag)) -}}
+{{- end -}}
+true
+{{- end -}}
+
+{{/*
 Get the DB password secret
 */}}
 {{- define "ds.db.secretName" -}}
@@ -77,9 +216,9 @@ Return RabbitMQ password
 Get the Redis password secret
 */}}
 {{- define "ds.redis.secretName" -}}
-{{- if or .Values.connections.redisPassword .Values.connections.redisNoPass -}}
+{{- if and .Values.connections.redisPassword (not (include "ds.redis.noPass" .)) -}}
     {{- printf "%s-%s" .Release.Name (include "ds.resources.name" (list . .Values.commonNameSuffix "redis")) -}}
-{{- else if .Values.connections.redisExistingSecret -}}
+{{- else if and (not (include "ds.redis.noPass" .)) .Values.connections.redisExistingSecret -}}
     {{- printf "%s" (tpl .Values.connections.redisExistingSecret $) -}}
 {{- end -}}
 {{- end -}}
@@ -88,7 +227,7 @@ Get the Redis password secret
 Return true if a secret object should be created for Redis
 */}}
 {{- define "ds.redis.createSecret" -}}
-{{- if or .Values.connections.redisPassword .Values.connections.redisNoPass (not .Values.connections.redisExistingSecret) -}}
+{{- if or (and .Values.connections.redisPassword (not (include "ds.redis.noPass" .))) (and (not (include "ds.redis.noPass" .)) (not .Values.connections.redisExistingSecret)) -}}
     {{- true -}}
 {{- end -}}
 {{- end -}}
@@ -99,7 +238,7 @@ Return Redis password
 {{- define "ds.redis.password" -}}
 {{- if not (empty .Values.connections.redisPassword) }}
     {{- .Values.connections.redisPassword }}
-{{- else if .Values.connections.redisNoPass }}
+{{- else if include "ds.redis.noPass" . }}
     {{- printf "" }}
 {{- else }}
     {{- required "A Redis Password is required!" .Values.connections.redisPassword }}
@@ -110,9 +249,9 @@ Return Redis password
 Get the Redis Sentinel password secret
 */}}
 {{- define "ds.redis.sentinel.secretName" -}}
-{{- if or .Values.connections.redisSentinelPassword .Values.connections.redisSentinelNoPass -}}
+{{- if and .Values.connections.redisSentinelPassword (not (include "ds.redis.sentinel.noPass" .)) -}}
     {{- printf "%s-%s" .Release.Name (include "ds.resources.name" (list . .Values.commonNameSuffix "redis-sentinel")) -}}
-{{- else if .Values.connections.redisSentinelExistingSecret -}}
+{{- else if and (not (include "ds.redis.sentinel.noPass" .)) .Values.connections.redisSentinelExistingSecret -}}
     {{- printf "%s" (tpl .Values.connections.redisSentinelExistingSecret $) -}}
 {{- end -}}
 {{- end -}}
@@ -121,7 +260,7 @@ Get the Redis Sentinel password secret
 Return true if a secret object should be created for Redis Sentinel
 */}}
 {{- define "ds.redis.sentinel.createSecret" -}}
-{{- if or .Values.connections.redisSentinelPassword .Values.connections.redisSentinelNoPass (not .Values.connections.redisSentinelExistingSecret) -}}
+{{- if or (and .Values.connections.redisSentinelPassword (not (include "ds.redis.sentinel.noPass" .))) (and (not (include "ds.redis.sentinel.noPass" .)) (not .Values.connections.redisSentinelExistingSecret)) -}}
     {{- true -}}
 {{- end -}}
 {{- end -}}
@@ -132,10 +271,93 @@ Return Redis Sentinel password
 {{- define "ds.redis.sentinel.password" -}}
 {{- if not (empty .Values.connections.redisSentinelPassword) }}
     {{- .Values.connections.redisSentinelPassword }}
-{{- else if .Values.connections.redisSentinelNoPass }}
+{{- else if include "ds.redis.sentinel.noPass" . }}
     {{- printf "" }}
 {{- else }}
     {{- required "A Redis Sentinel Password is required!" .Values.connections.redisSentinelPassword }}
+{{- end }}
+{{- end -}}
+
+{{/* Render the native Redis user and secret variables, only for the Pods that use Redis (not the Converter). */}}
+{{- define "ds.redis.env" -}}
+{{- if eq (include "ds.redis.enabled" .) "true" }}
+{{- if and (not (include "ds.redis.noPass" .)) .Values.connections.redisUser }}
+- name: REDIS_SERVER_USER
+  value: {{ .Values.connections.redisUser | quote }}
+{{- end }}
+{{- if not (include "ds.redis.noPass" .) }}
+- name: REDIS_SERVER_PWD
+  valueFrom:
+    secretKeyRef:
+      name: {{ template "ds.redis.secretName" . }}
+      key: {{ .Values.connections.redisSecretKeyName }}
+{{- end }}
+{{- if and .Values.connections.redisSentinelNodes (not (include "ds.redis.sentinel.noPass" .)) .Values.connections.redisSentinelUser }}
+- name: REDIS_SENTINEL_USER
+  value: {{ .Values.connections.redisSentinelUser | quote }}
+{{- end }}
+{{- if and .Values.connections.redisSentinelNodes (not (include "ds.redis.sentinel.noPass" .)) }}
+- name: REDIS_SENTINEL_PWD
+  valueFrom:
+    secretKeyRef:
+      name: {{ template "ds.redis.sentinel.secretName" . }}
+      key: {{ .Values.connections.redisSentinelSecretKeyName }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/* Share Redis CA trust between the Docservice and Adminpanel containers and the connectivity hook (only when Redis is used). */}}
+{{- define "ds.redis.ca.enabled" -}}
+{{- $tls := or (include "ds.redis.tls" .) (include "ds.redis.sentinel.tls" .) -}}
+{{- if and (eq (include "ds.redis.enabled" .) "true") .Values.connections.redisCAExistingSecret $tls -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{- define "ds.redis.ca.volume" -}}
+{{- if include "ds.redis.ca.enabled" . }}
+- name: redis-ca-certificates
+  secret:
+    secretName: {{ tpl .Values.connections.redisCAExistingSecret . | quote }}
+    items:
+    - key: {{ .Values.connections.redisCASecretKeyName | quote }}
+      path: ca.crt
+{{- end }}
+{{- end -}}
+
+{{- define "ds.redis.ca.mount" -}}
+{{- if include "ds.redis.ca.enabled" . }}
+- name: redis-ca-certificates
+  mountPath: /etc/redis-ca-certificates
+  readOnly: true
+{{- end }}
+{{- end -}}
+
+{{- define "ds.redis.ca.env" -}}
+{{- $overrides := dict }}
+{{- range .extraEnvVars }}
+{{- $_ := set $overrides .name true }}
+{{- end }}
+{{- if and (include "ds.redis.ca.enabled" .context) (not (hasKey $overrides "NODE_EXTRA_CA_CERTS")) }}
+- name: NODE_EXTRA_CA_CERTS
+  value: /etc/redis-ca-certificates/ca.crt
+{{- end }}
+{{- end -}}
+
+{{- define "ds.redis.ca.testEnv" -}}
+{{- if include "ds.redis.ca.enabled" . }}
+{{- $overrides := dict }}
+{{- range .Values.tests.extraEnvVars }}
+{{- $_ := set $overrides .name true }}
+{{- end }}
+{{- if and (include "ds.redis.tls" .) (not (hasKey $overrides "REDIS_SERVER_CA_CERTS")) }}
+- name: REDIS_SERVER_CA_CERTS
+  value: /etc/redis-ca-certificates/ca.crt
+{{- end }}
+{{- if and (include "ds.redis.sentinel.tls" .) (not (hasKey $overrides "REDIS_SENTINEL_CA_CERTS")) }}
+- name: REDIS_SENTINEL_CA_CERTS
+  value: /etc/redis-ca-certificates/ca.crt
+{{- end }}
 {{- end }}
 {{- end -}}
 

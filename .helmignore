@@ -25,3 +25,9 @@
 .vscode/
 # Test dirs
 sources/litmus/
+# Anchored: an unanchored tests/ would also drop templates/tests/ (the helm test hooks)
+/tests/
+sources/scripts/test_redis_rendering.py
+sources/scripts/test_ds_tls.py
+__pycache__/
+*.pyc

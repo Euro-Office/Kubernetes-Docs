@@ -1,0 +1,379 @@
+# Redis Sentinel test install: 2 Redis nodes (primary + replica) and 3 Sentinels.
+# It mirrors develop/docker-compose.redis-sentinel.yml of Euro-Office/DocumentServer
+# (plain by default, TLS optional), adapted to Kubernetes. For QA only: no
+# persistence, no PVCs.
+#
+# TLS: off by default. To switch it on apply redis-tls-certs.yaml (cert-manager
+# issues the Secret redis-tls from a test CA), then
+#   kubectl rollout restart statefulset/redis-node statefulset/redis-sentinel -n euro-office
+# The pods use TLS when the optional Secret redis-tls is mounted at /tls, with the
+# same ports. To switch it off delete the Secret redis-tls (and the Certificates in
+# redis-tls-certs.yaml) and restart the StatefulSets. Then add
+# my-values.redis-tls.yml to the helm install.
+#
+# Image: valkey/valkey 8.1.12-alpine. It ships redis-server and redis-cli as
+# symlinks to valkey-server and valkey-cli, so the redis-* names are used below.
+# redis:7.4-alpine works as a drop-in replacement (same flags): change the three
+# `image:` lines, nothing else.
+#
+# Use with: helm install ... -f my-values.yml -f my-values.redis-sentinel.yml
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: redis-sentinel-auth
+  namespace: euro-office
+type: Opaque
+stringData:
+  # Password of the Redis nodes (requirepass / masterauth).
+  redis-password: redis
+  # Password of the Sentinels. Empty (default) = Sentinel without authentication.
+  # To enable it set a value here, then in my-values.redis-sentinel.yml enable the
+  # commented "Sentinel authentication" lines. Use only letters and digits: the
+  # value is written unquoted into sentinel.conf.
+  sentinel-password: ""
+  # Named Sentinel ACL user. Empty (default) = only the Sentinel password is used
+  # (the default user). It takes effect only together with sentinel-password.
+  # The user gets the minimal rights of a Sentinel client, see below.
+  sentinel-user: ""
+---
+# Headless Service of the Redis nodes. publishNotReadyAddresses lets the pods
+# resolve each other before they are Ready (a replica must reach its primary).
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-node
+  namespace: euro-office
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: redis-node
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-node
+  namespace: euro-office
+spec:
+  serviceName: redis-node
+  replicas: 2
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: redis-node
+  template:
+    metadata:
+      labels:
+        app: redis-node
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: redis
+        image: valkey/valkey:8.1.12-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-sentinel-auth
+              key: redis-password
+        - name: SENTINEL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-sentinel-auth
+              key: sentinel-password
+        command:
+        - sh
+        - -c
+        - |
+          set -eu
+          ns="$POD_NAMESPACE"
+          fqdn="$HOSTNAME.redis-node.$ns.svc.cluster.local"
+          ordinal="${HOSTNAME##*-}"
+
+          # TLS mode when the optional Secret redis-tls is mounted at /tls.
+          tls=""
+          if [ -f /tls/tls.crt ]; then tls=1; fi
+          cli() {
+            if [ -n "$tls" ]; then timeout 3 redis-cli --tls --cacert /tls/ca.crt "$@"; else timeout 3 redis-cli "$@"; fi
+          }
+
+          # Ask one Sentinel for the current primary. Prints the host, or nothing.
+          ask_sentinel() {
+            if [ -n "$SENTINEL_PASSWORD" ]; then
+              (export REDISCLI_AUTH="$SENTINEL_PASSWORD"; cli -h "$1" -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -n 1)
+            else
+              cli -h "$1" -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -n 1
+            fi
+          }
+
+          # 1) The Sentinels know which node is the primary now. After a failover a
+          #    restarted former primary must join as a replica of the new one, never
+          #    start as a second primary (split brain).
+          primary=""
+          for i in 0 1 2; do
+            primary="$(ask_sentinel "redis-sentinel-$i.redis-sentinel.$ns.svc.cluster.local" || true)"
+            [ -n "$primary" ] && break
+          done
+
+          # 2) No Sentinel answers (first start): ordinal 0 is the primary.
+          if [ -z "$primary" ]; then
+            if [ "$ordinal" = "0" ]; then primary="$fqdn"; else primary="redis-node-0.redis-node.$ns.svc.cluster.local"; fi
+          fi
+
+          if [ "$primary" = "$fqdn" ]; then
+            echo "starting $fqdn as primary"
+            set --
+          else
+            echo "starting $fqdn as replica of $primary"
+            set -- --replicaof "$primary" 6379
+          fi
+          if [ -n "$tls" ]; then
+            set -- "$@" --port 0 --tls-port 6379 \
+              --tls-cert-file /tls/tls.crt --tls-key-file /tls/tls.key --tls-ca-cert-file /tls/ca.crt \
+              --tls-auth-clients no --tls-replication yes
+          else
+            set -- "$@" --port 6379
+          fi
+          exec redis-server "$@" \
+            --bind 0.0.0.0 --protected-mode no \
+            --appendonly no --save "" --dir /data \
+            --requirepass "$REDIS_PASSWORD" --masterauth "$REDIS_PASSWORD" \
+            --replica-announce-ip "$fqdn"
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: tls
+          mountPath: /tls
+          readOnly: true
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - |
+              if [ -f /tls/tls.crt ]; then set -- --tls --cacert /tls/ca.crt; else set --; fi
+              REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli "$@" -h 127.0.0.1 ping | grep -q PONG
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 50m
+          limits:
+            memory: 256Mi
+            cpu: 500m
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: tls
+        secret:
+          secretName: redis-tls
+          optional: true
+          defaultMode: 0440
+---
+# Headless Service of the Sentinels.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sentinel
+  namespace: euro-office
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: redis-sentinel
+  ports:
+  - name: sentinel
+    port: 26379
+    targetPort: 26379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-sentinel
+  namespace: euro-office
+spec:
+  serviceName: redis-sentinel
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: redis-sentinel
+  template:
+    metadata:
+      labels:
+        app: redis-sentinel
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: sentinel
+        image: valkey/valkey:8.1.12-alpine
+        ports:
+        - containerPort: 26379
+          name: sentinel
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-sentinel-auth
+              key: redis-password
+        - name: SENTINEL_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-sentinel-auth
+              key: sentinel-password
+        - name: SENTINEL_USER
+          valueFrom:
+            secretKeyRef:
+              name: redis-sentinel-auth
+              key: sentinel-user
+        command:
+        - sh
+        - -c
+        - |
+          set -eu
+          ns="$POD_NAMESPACE"
+          fqdn="$HOSTNAME.redis-sentinel.$ns.svc.cluster.local"
+          conf=/data/sentinel.conf
+
+          # TLS mode when the optional Secret redis-tls is mounted at /tls.
+          tls=""
+          if [ -f /tls/tls.crt ]; then tls=1; fi
+          cli() {
+            if [ -n "$tls" ]; then timeout 3 redis-cli --tls --cacert /tls/ca.crt "$@"; else timeout 3 redis-cli "$@"; fi
+          }
+
+          # Ask another Sentinel for the current primary (used when this pod restarts
+          # after a failover). Prints the host, or nothing.
+          ask_sentinel() {
+            if [ -n "$SENTINEL_PASSWORD" ]; then
+              (export REDISCLI_AUTH="$SENTINEL_PASSWORD"; cli -h "$1" -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -n 1)
+            else
+              cli -h "$1" -p 26379 SENTINEL get-master-addr-by-name mymaster 2>/dev/null | head -n 1
+            fi
+          }
+
+          primary=""
+          for i in 0 1 2; do
+            peer="redis-sentinel-$i.redis-sentinel.$ns.svc.cluster.local"
+            [ "$peer" = "$fqdn" ] && continue
+            primary="$(ask_sentinel "$peer" || true)"
+            [ -n "$primary" ] && break
+          done
+          [ -n "$primary" ] || primary="redis-node-0.redis-node.$ns.svc.cluster.local"
+
+          # Sentinel rewrites its configuration file, so it lives in a writable volume.
+          {
+            if [ -n "$tls" ]; then
+              echo "port 0"
+              echo "tls-port 26379"
+              echo "tls-cert-file /tls/tls.crt"
+              echo "tls-key-file /tls/tls.key"
+              echo "tls-ca-cert-file /tls/ca.crt"
+              echo "tls-auth-clients no"
+              echo "tls-replication yes"
+            else
+              echo "port 26379"
+            fi
+            echo "bind 0.0.0.0"
+            echo "protected-mode no"
+            echo "dir /data"
+            echo "sentinel resolve-hostnames yes"
+            echo "sentinel announce-hostnames yes"
+            echo "sentinel announce-ip $fqdn"
+            echo "sentinel monitor mymaster $primary 6379 2"
+            echo "sentinel auth-pass mymaster $REDIS_PASSWORD"
+            echo "sentinel down-after-milliseconds mymaster 5000"
+            echo "sentinel failover-timeout mymaster 30000"
+            echo "sentinel parallel-syncs mymaster 1"
+            if [ -n "$SENTINEL_PASSWORD" ]; then
+              # Sentinels authenticate to each other as the default user.
+              echo "requirepass $SENTINEL_PASSWORD"
+              echo "sentinel sentinel-pass $SENTINEL_PASSWORD"
+              if [ -n "$SENTINEL_USER" ]; then
+                # Minimal ACL of the two Sentinel clients of this setup:
+                #  - DocumentServer's DocService (node-redis 6.2.1): reads the topology
+                #    (SENTINEL MASTER/SENTINELS/REPLICAS), checks each Sentinel with PING at
+                #    startup, reports its library with CLIENT SETINFO and subscribes to the
+                #    Sentinel event channels;
+                #  - the chart's helm test Pod test-ds (redis-py 6.4.0): Sentinel discovery
+                #    calls SENTINEL MASTERS.
+                # Without +ping DocService logs "NOPERM ... 'ping'" for every Sentinel at
+                # startup; without +sentinel|masters test-ds fails with "No master found".
+                # AUTH needs no rule, no keys are used. A newer client may need more: look
+                # at `ACL LOG` on the Sentinels.
+                # Commands: https://valkey.io/topics/sentinel/ ; ACL rules: https://valkey.io/topics/acl/
+                echo "user $SENTINEL_USER on >$SENTINEL_PASSWORD resetchannels &switch-master &[-+]sdown &+slave &+sentinel &[-+]odown &+slave-reconf-done -@all +client|setinfo +sentinel|sentinels +sentinel|master +sentinel|replicas +sentinel|masters +ping +psubscribe"
+              fi
+            fi
+          } > "$conf"
+          echo "starting sentinel $fqdn, monitoring $primary"
+          exec redis-server "$conf" --sentinel
+        volumeMounts:
+        - name: data
+          mountPath: /data
+        - name: tls
+          mountPath: /tls
+          readOnly: true
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - |
+              if [ -n "$SENTINEL_PASSWORD" ]; then export REDISCLI_AUTH="$SENTINEL_PASSWORD"; fi
+              if [ -f /tls/tls.crt ]; then set -- --tls --cacert /tls/ca.crt; else set --; fi
+              redis-cli "$@" -h 127.0.0.1 -p 26379 SENTINEL get-master-addr-by-name mymaster | grep -q .
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        resources:
+          requests:
+            memory: 32Mi
+            cpu: 25m
+          limits:
+            memory: 128Mi
+            cpu: 250m
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: tls
+        secret:
+          secretName: redis-tls
+          optional: true
+          defaultMode: 0440

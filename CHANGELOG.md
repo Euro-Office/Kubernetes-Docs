@@ -1,5 +1,47 @@
 # Change log
 
+## 8.0.0
+
+### Breaking Changes
+
+* Redis editor storage (`docservice.editorDataStorage`, `docservice.editorStatStorage`) and Redis TLS (`connections.redisTLS`, `connections.redisSentinelTLS`) require a DocumentServer release with Redis editor storage support (entrypoint and server). Older images ignore these settings. The chart rejects images older than the minimum supported version once that version is set
+* Removed the `connections.redisConnectorName` parameter (the `ioredis` switch for Redis Sentinel). Redis Sentinel is now used when `docservice.editorDataStorage` or `docservice.editorStatStorage` is `sentinel` and `connections.redisSentinelNodes` is set, and Redis Cluster when it is `cluster` and `connections.redisClusterNodes` is set; the nodes alone do nothing in memory mode. Remove `redisConnectorName` from your values files. Setting it to `ioredis` (or any value other than `redis`) now fails the install/upgrade with a migration message; `redis` is ignored with a notice
+* `REDIS_SENTINEL_PWD` is now rendered only if `connections.redisSentinelNodes` is set and `connections.redisSentinelNoPass` is `false` (the default is `true`), and `REDIS_SERVER_PWD` is no longer rendered if `connections.redisNoPass` is `true`. Users who set `redisConnectorName: ioredis` with an authenticated Sentinel must set `connections.redisSentinelNodes`, `connections.redisSentinelGroupName` and `connections.redisSentinelNoPass: false`
+
+### New Features
+
+* Added render-time validation, active only when Redis storage is used: Redis Cluster requires `connections.redisDBNum` `0`, `connections.redisCAExistingSecret` requires `connections.redisTLS` or `connections.redisSentinelTLS`, and `connections.redisDBNum` must be a non-negative integer
+* Added a post-install warning (`NOTES.txt`) for in-memory editor storage with more than one DocService replica or with autoscaling, because the co-editing state is per Pod and the chart has no document-affinity routing
+* Added a DocumentServer version gate for Redis editor storage (`ds.redis.minImageVersion` in `templates/_helpers.tpl`). It rejects known older numeric `docservice` image tags when a Redis storage mode is selected and is inactive until the minimum DocumentServer version is set
+* Added configurable editor storage: `docservice.editorDataStorage` (`memory`, `standalone`, `sentinel` or `cluster`, default `memory`) and `docservice.editorStatStorage` (defaults to the value of `editorDataStorage`). The chart fails to render for unsupported modes and for conflicting Redis topologies
+* Added Redis and Sentinel TLS support (`connections.redisTLS`, `connections.redisSentinelTLS`) and a shared private CA bundle (`connections.redisCAExistingSecret`, `connections.redisCASecretKeyName`) mounted into the Docservice, Adminpanel and test Pods. Requires a DocumentServer image with the Redis TLS changes
+* Added password-only and named ACL user authentication for Redis and Sentinel (`connections.redisUser: ""` omits the username, new `connections.redisSentinelUser`)
+* Added `tests.extraEnvVars`, `tests.extraVolumes` and `tests.extraVolumeMounts` for the test Pod
+* Added example values files `demo/my-values.redis-standalone.yml`, `demo/my-values.redis-data-only.yml`, `demo/my-values.redis-sentinel.yml` and `demo/my-values.redis-cluster.yml`, and a `test-redis-config` test (`test_redis_config.sh`). `helm test` runs it for any Redis-backed storage mode: it checks that the DocService image selects the requested storage and topology, and fails fast on images without Redis storage support. Connectivity, authentication and TLS are checked by `test-ds`
+* Added demo manifests `demo/redis-sentinel.yaml` and `demo/redis-cluster.yaml` (Valkey, without TLS) for testing the Sentinel and Cluster editor storage modes and failover; the Sentinel and Cluster values files now point to them
+* Added optional TLS to the demo Sentinel and Cluster test installs: `demo/redis-tls-certs.yaml` has cert-manager resources (a self-signed test CA, a CA Issuer and a server Certificate issued into the Secret `redis-tls`), the manifests switch to TLS when `redis-tls` exists, and `demo/my-values.redis-tls.yml` enables `redisTLS`, `redisSentinelTLS` and `redisCAExistingSecret` (the chart mounts only the `ca.crt` item of that Secret)
+* Added CI for the chart: the `chart-unit-tests` job in `lint.yaml` runs the rendering and connectivity-hook unit tests and `tests/entrypoint_contract.py` (the real DocumentServer entrypoint against the environment of each component, pinned DocumentServer commit), and the weekly `entrypoint-drift` workflow runs the contract against DocumentServer `main`; the test files are excluded from the chart package
+* Documented how to switch an existing release to Redis TLS without failing the `pre-upgrade` Job (README, "Switching an existing release to Redis TLS") and a controlled Cluster failover test with `CLUSTER FAILOVER` (`demo/Readme.md`)
+
+### Changes
+
+* Removed `REDIS_CONNECTOR_NAME` from the shared `documentserver` ConfigMap: the DocumentServer entrypoint defaults it to `redis`, the only connector the server accepts. `REDIS_SENTINEL_TLS` is now rendered only with `connections.redisSentinelNodes` or when `connections.redisSentinelTLS` is true (a missing value means false, and `true` also applies to a Sentinel configured in local.json or NODE_CONFIG). All Pods that use the ConfigMap restart once on upgrade, as they already do for other 8.0.0 changes
+* The Redis flags `connections.redisTLS`, `connections.redisSentinelTLS`, `connections.redisNoPass` and `connections.redisSentinelNoPass` are parsed like the DocumentServer entrypoint does (`true`/`yes`/`y`/`on`/`1` and `false`/`no`/`n`/`off`/`0`, case-insensitive; empty means unset). Before, the string `"false"` (for example from `--set-string`) was taken as true: `redisNoPass: "false"` dropped the password and `redisTLS: "false"` mounted the CA with TLS off. Other values now fail the render. The editor storage modes are computed in one place (`ds.editor.dataStorage` and `ds.editor.statStorage`); renders for boolean values are unchanged
+* The Converter no longer receives Redis credentials or the Redis CA: it does not use Redis. Only the Docservice, Adminpanel and the test Pods do. The Redis usernames (`REDIS_SERVER_USER`, `REDIS_SENTINEL_USER`) moved from the shared `documentserver` ConfigMap to the env of the Redis-using Pods, because the entrypoint rejects a Sentinel user without a password. All Pods that use the ConfigMap and the Converter Pods restart once on upgrade
+* The Redis password environment variables are now rendered by shared helpers in all workloads and in the test Pod
+* The test Pod selects the Redis mode from `REDIS_SENTINEL_NODES` and `REDIS_CLUSTER_NODES` instead of `REDIS_CONNECTOR_NAME`
+* README: documented the Redis storage topologies, TLS and authentication secrets; fixed the parameter name `connections.redistHost` to `connections.redisHost`
+
+### Fixes
+
+* Clarified that `connections.redisHost` and `connections.redisPort` are used only for standalone Redis and are ignored when Sentinel or Cluster nodes are set
+* Fixed `helm test` reporting success when a check other than `CheckDS` failed. Skipped checks do not fail the run
+* Memory editor storage (the default) no longer requires Redis: the Redis password env, Secrets, CA wiring and password validation are rendered only when `editorDataStorage` or `editorStatStorage` is a Redis mode. `test-ds` reports `CheckRedis` as `Skipped` otherwise
+* The `test-ds` Redis check now writes a temporary `ds:helm-test:<uuid>` key with a 60 second expiry, so ACL users restricted to `~ds:*` work
+* `test-ds` now uses all configured Sentinel nodes and all Cluster nodes instead of only the first one, so `helm test` no longer fails when that node is down
+* The `test-ds` RabbitMQ check declares an exclusive queue instead of a transient non-exclusive one, which RabbitMQ 4.3 rejects (`transient_nonexcl_queues` is a deprecated feature), so `helm test` passes with RabbitMQ 4.3 (and 3.13)
+* The post-install notes show the log command of the `test-redis-config` test Pod when Redis editor storage is used
+
 ## 7.0.0
 
 ### Breaking Changes

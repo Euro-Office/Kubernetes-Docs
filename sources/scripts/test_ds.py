@@ -3,25 +3,44 @@ import sys
 import subprocess
 import time
 import logging
+import uuid
 
-redisConnectorName = os.environ.get('REDIS_CONNECTOR_NAME')
+
+def redis_tls_options(prefix):
+    if os.environ.get(f'{prefix}_TLS') != 'true':
+        return {}
+    options = {'ssl': True, 'ssl_cert_reqs': 'required'}
+    ca_certs = os.environ.get(f'{prefix}_CA_CERTS')
+    if ca_certs:
+        options['ssl_ca_certs'] = ca_certs
+    return options
+
+
+def parse_nodes(value):
+    """'host:port host:port' -> [(host, port), ...]. Also accepts [IPv6]:port and a redis:// or rediss:// prefix."""
+    nodes = []
+    for node in (value or '').split():
+        node = node.split('://', 1)[-1]
+        host, _, port = node.rpartition(':')
+        nodes.append((host.strip('[]'), int(port)))
+    return nodes
+
+
 redisHost = os.environ.get('REDIS_SERVER_HOST')
 redisPort = os.environ.get('REDIS_SERVER_PORT')
 redisUser = os.environ.get('REDIS_SERVER_USER')
 redisPassword = os.environ.get('REDIS_SERVER_PWD')
+redisTLSOptions = redis_tls_options('REDIS_SERVER')
+redisSentinelTLSOptions = redis_tls_options('REDIS_SENTINEL')
+redisSentinelUser = os.environ.get('REDIS_SENTINEL_USER')
 redisSentinelPassword = os.environ.get('REDIS_SENTINEL_PWD')
 redisDBNum = os.environ.get('REDIS_SERVER_DB_NUM')
 redisConnectTimeout = 15
 if os.environ.get('REDIS_CLUSTER_NODES'):
-    redisClusterNodes = list(os.environ.get('REDIS_CLUSTER_NODES').split(" "))
-    redisClusterNode = redisClusterNodes[0].split(":")[0]
-    redisClusterPort = redisClusterNodes[0].split(":")[1]
-if redisConnectorName == 'ioredis':
+    redisClusterNodes = parse_nodes(os.environ.get('REDIS_CLUSTER_NODES'))
+if os.environ.get('REDIS_SENTINEL_NODES'):
     redisSentinelGroupName = os.environ.get('REDIS_SENTINEL_GROUP_NAME')
-    if os.environ.get('REDIS_SENTINEL_NODES'):
-        redisSentinelNodes = list(os.environ.get('REDIS_SENTINEL_NODES').split(" "))
-        redisSentinelNode = redisSentinelNodes[0].split(":")[0]
-        redisSentinelPort = redisSentinelNodes[0].split(":")[1]
+    redisSentinelNodes = parse_nodes(os.environ.get('REDIS_SENTINEL_NODES'))
 
 dbType = os.environ.get('DB_TYPE')
 dbHost = os.environ.get('DB_HOST')
@@ -73,7 +92,8 @@ def get_redis_status():
             password=redisPassword,
             username=redisUser,
             socket_connect_timeout=redisConnectTimeout,
-            retry=retry_strategy
+            retry=retry_strategy,
+            **redisTLSOptions
         )
         rc.ping()
     except Exception as msg_redis:
@@ -92,13 +112,14 @@ def get_redis_cluster_status():
     retry_strategy = Retry(ExponentialBackoff(), retries=3)
     global rc
     try:
-        nodes = [ClusterNode(redisClusterNode, redisClusterPort)]
+        nodes = [ClusterNode(host, port) for host, port in redisClusterNodes]
         rc = Redis(
             startup_nodes=nodes,
             username=redisUser,
             password=redisPassword,
             socket_connect_timeout=redisConnectTimeout,
-            retry=retry_strategy
+            retry=retry_strategy,
+            **redisTLSOptions
         )
         rc.ping()
     except Exception as msg_redis:
@@ -117,7 +138,12 @@ def get_redis_sentinel_status():
     retry_strategy = Retry(ExponentialBackoff(), retries=3)
     global rc
     try:
-        sentinel = Sentinel([(redisSentinelNode, redisSentinelPort)], socket_timeout=redisConnectTimeout, sentinel_kwargs={'password': redisSentinelPassword})
+        sentinel_kwargs = dict(redisSentinelTLSOptions)
+        if redisSentinelUser:
+            sentinel_kwargs['username'] = redisSentinelUser
+        if redisSentinelPassword:
+            sentinel_kwargs['password'] = redisSentinelPassword
+        sentinel = Sentinel(redisSentinelNodes, socket_timeout=redisConnectTimeout, sentinel_kwargs=sentinel_kwargs)
         master_host, master_port = sentinel.discover_master(redisSentinelGroupName)
         rc = redis.Redis(
             host=master_host,
@@ -126,7 +152,8 @@ def get_redis_sentinel_status():
             password=redisPassword,
             username=redisUser,
             socket_connect_timeout=redisConnectTimeout,
-            retry=retry_strategy
+            retry=retry_strategy,
+            **redisTLSOptions
         )
         rc.ping()
     except Exception as msg_redis:
@@ -137,16 +164,27 @@ def get_redis_sentinel_status():
         return rc.ping()
 
 
+def redis_in_use():
+    return 'editorDataRedis' in (os.environ.get('EDITOR_DATA_STORAGE'), os.environ.get('EDITOR_STAT_STORAGE'))
+
+
 def check_redis_key():
+    # The key lives under DocService's key prefix ("ds:"), so ACL users restricted to ~ds:* can write it.
+    key = f'ds:helm-test:{uuid.uuid4().hex}'
     try:
-        rc.set('testDocsServer', 'ok')
-        test_key = rc.get('testDocsServer').decode('utf-8')
+        rc.set(key, 'ok', ex=60)
+        test_key = rc.get(key)
+        if isinstance(test_key, bytes):
+            test_key = test_key.decode('utf-8')
+        logger_test_ds.debug(f'Test key: {key}')
+        if test_key != 'ok':
+            raise ValueError(f'unexpected value read back: {test_key!r}')
         logger_test_ds.info(f'Test Key: {test_key}')
     except Exception as msg_check_redis:
         logger_test_ds.error(f'Error when trying to write a key to Redis... {msg_check_redis}\n')
         total_result['CheckRedis'] = 'Failed'
     else:
-        rc.delete('testDocsServer')
+        rc.delete(key)
         logger_test_ds.info('The test key was successfully recorded and deleted from Redis\n')
         rc.close()
         total_result['CheckRedis'] = 'Success'
@@ -154,14 +192,14 @@ def check_redis_key():
 
 def check_redis():
     logger_test_ds.info('Checking Redis availability...')
-    if redisConnectorName == 'redis' and not os.environ.get('REDIS_CLUSTER_NODES'):
-        if get_redis_status() is True:
+    if os.environ.get('REDIS_SENTINEL_NODES'):
+        if get_redis_sentinel_status() is True:
             check_redis_key()
-    elif redisConnectorName == 'redis' and os.environ.get('REDIS_CLUSTER_NODES'):
+    elif os.environ.get('REDIS_CLUSTER_NODES'):
         if get_redis_cluster_status() is True:
             check_redis_key()
-    elif redisConnectorName == 'ioredis':
-        if get_redis_sentinel_status() is True:
+    else:
+        if get_redis_status() is True:
             check_redis_key()
 
 
@@ -256,7 +294,9 @@ def check_mq_rabbitmq():
         if mq_connect_status is True:
             try:
                 mqchannel = mqc.channel()
-                mqchannel.queue_declare(queue='testDocsServer')
+                # RabbitMQ 4.x denies transient non-exclusive queues by default (deprecated feature
+                # transient_nonexcl_queues). An exclusive queue is allowed and is deleted with the connection.
+                mqchannel.queue_declare(queue='testDocsServer', exclusive=True)
             except Exception as msg_check_rabbitmq_queue:
                 logger_test_ds.error(f'Error when trying to create a test queue in RabbitMQ... {msg_check_rabbitmq_queue}\n')
                 total_result['CheckRabbitMQ'] = 'Failed'
@@ -362,17 +402,21 @@ def total_status():
     logger_test_ds.info('As a result of the check, the following results were obtained:')
     for key, value in total_result.items():
         logger_test_ds.info(f'{key} = {value}')
-    if total_result['CheckDS'] != 'Success':
+    if any(value not in ('Success', 'Skipped') for value in total_result.values()):
         sys.exit(1)
 
 
-init_logger('test')
-logger_test_ds = logging.getLogger('test.ds')
-check_redis()
-check_db()
-check_mq()
-if storageS3 == 'false':
-    check_dir_access()
-get_ds_status()
-total_status()
-
+if __name__ == '__main__':
+    init_logger('test')
+    logger_test_ds = logging.getLogger('test.ds')
+    if redis_in_use():
+        check_redis()
+    else:
+        logger_test_ds.info('Redis is not used by the editor storage; skipping the Redis check\n')
+        total_result['CheckRedis'] = 'Skipped'
+    check_db()
+    check_mq()
+    if storageS3 == 'false':
+        check_dir_access()
+    get_ds_status()
+    total_status()

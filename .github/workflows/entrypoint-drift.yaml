@@ -1,0 +1,47 @@
+name: entrypoint-drift
+
+run-name: "DocumentServer entrypoint drift check"
+
+# Runs the chart's entrypoint contract against the CURRENT DocumentServer main, to
+# notice an entrypoint change that breaks the chart before the pinned commit in
+# lint.yaml (chart-unit-tests) is moved. A failure fails the run; no issue is created.
+on:
+  schedule:
+    - cron: '17 3 * * 1'   # Mondays 03:17 UTC, off-peak
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  entrypoint-contract:
+    name: "entrypoint contract against DocumentServer main"
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout chart
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.15.2'
+
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: 'v3.22.1'
+
+      - name: Install test dependencies
+        run: python3 -m pip install pyyaml
+
+      - name: Checkout DocumentServer entrypoint scripts (main)
+        uses: actions/checkout@v7
+        with:
+          repository: Euro-Office/DocumentServer
+          ref: main
+          sparse-checkout: build/scripts
+          path: ds
+          persist-credentials: false
+
+      - name: Entrypoint contract
+        run: python3 -I tests/entrypoint_contract.py --ds-scripts ds/build/scripts

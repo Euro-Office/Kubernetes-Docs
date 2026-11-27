@@ -1,0 +1,92 @@
+# Test certificates for the optional TLS mode of the demo Redis Sentinel and Redis
+# Cluster installs (redis-sentinel.yaml, redis-cluster.yaml), issued by cert-manager
+# (https://cert-manager.io/docs/): a self-signed test CA, a CA Issuer and one server
+# certificate for all three headless Services. It creates the Secrets
+#   redis-test-ca  the test CA key pair
+#   redis-tls      tls.crt, tls.key and ca.crt (the CA), mounted by the Redis and
+#                  Sentinel pods at /tls and, only its ca.crt item, by the chart
+#                  (connections.redisCAExistingSecret, see my-values.redis-tls.yml)
+# For testing only. The namespace is euro-office like the other demo manifests; for
+# another namespace change it in every `namespace:` below and in the dnsNames.
+---
+# Field names: https://cert-manager.io/docs/configuration/selfsigned/
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: redis-selfsigned
+  namespace: euro-office
+spec:
+  selfSigned: {}
+---
+# A CA certificate (isCA) signed by the self-signed Issuer. Certificate fields:
+# https://cert-manager.io/docs/usage/certificate/
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: redis-test-ca
+  namespace: euro-office
+spec:
+  isCA: true
+  commonName: Euro-Office Redis test CA
+  secretName: redis-test-ca
+  duration: 8760h # 1 year
+  renewBefore: 720h # 30 days
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Never # renewal keeps the CA key, so issued certificates stay valid
+  issuerRef:
+    name: redis-selfsigned
+    kind: Issuer
+    group: cert-manager.io
+---
+# Issues certificates from the test CA: https://cert-manager.io/docs/configuration/ca/
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: redis-ca-issuer
+  namespace: euro-office
+spec:
+  ca:
+    secretName: redis-test-ca
+---
+# The server certificate. The pods are TLS servers and also TLS clients (replication,
+# Sentinel, cluster bus), so it has both usages. One wildcard per headless Service
+# covers the pod names (redis-node-0.redis-node.euro-office.svc.cluster.local, ...).
+# As the issuer is a CA, cert-manager stores the CA certificate in the Secret as ca.crt.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: redis-tls
+  namespace: euro-office
+spec:
+  secretName: redis-tls
+  duration: 8760h # 1 year
+  renewBefore: 720h # 30 days
+  isCA: false
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  usages:
+  - server auth
+  - client auth
+  - digital signature
+  - key encipherment
+  dnsNames:
+  - "*.redis-node.euro-office.svc.cluster.local"
+  - redis-node.euro-office.svc.cluster.local
+  - redis-node
+  - "*.redis-sentinel.euro-office.svc.cluster.local"
+  - redis-sentinel.euro-office.svc.cluster.local
+  - redis-sentinel
+  - "*.redis-cluster.euro-office.svc.cluster.local"
+  - redis-cluster.euro-office.svc.cluster.local
+  - redis-cluster
+  - localhost
+  ipAddresses:
+  - 127.0.0.1
+  - ::1
+  issuerRef:
+    name: redis-ca-issuer
+    kind: Issuer
+    group: cert-manager.io
