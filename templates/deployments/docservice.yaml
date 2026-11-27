@@ -16,6 +16,9 @@ spec:
   {{- if not .Values.docservice.autoscaling.enabled }}
   replicas: {{ .Values.docservice.replicas }}
   {{- end }}
+  {{- if not (kindIs "invalid" .Values.docservice.revisionHistoryLimit) }}
+  revisionHistoryLimit: {{ .Values.docservice.revisionHistoryLimit }}
+  {{- end }}
   selector:
     matchLabels:
       app: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "docservice") }}
@@ -32,12 +35,18 @@ spec:
         {{- if .Values.commonLabels }}
         {{- include "ds.labels.commonLabels" . | trim | nindent 8 }}
         {{- end }}
-      {{- if .Values.docservice.podAnnotations }}
       annotations:
+        {{- include "ds.annotations.checksums" (dict "podAnnotations" .Values.docservice.podAnnotations "checksums" (dict
+            "checksum/config" (include "ds.checksum.templates" (list . "configmaps/documentserver.yaml"))
+            "checksum/welcome-page" (include "ds.checksum.templates" (list . "configmaps/welcome-page.yaml"))
+            "checksum/credentials" (include "ds.checksum.templates" (list . "secrets/db-password.yaml" "secrets/rabbitmq-password.yaml" "secrets/redis-password.yaml" "secrets/redis-sentinel-password.yaml"))
+            "checksum/jwt" (include "ds.checksum.jwtInput" .)
+            "checksum/secure-link" (include "ds.checksum.secureLinkInput" .)
+            "checksum/info-auth" (include "ds.checksum.infoAuthInput" .)
+        )) | trim | nindent 8 }}
         {{- range $key, $value := .Values.docservice.podAnnotations }}
         {{ $key }}: {{ tpl $value $ }}
         {{- end }}
-      {{- end }}
     spec:
       serviceAccountName: {{ include "ds.serviceAccountName" . }}
       {{- if .Values.podSecurityContext.enabled }}
@@ -316,6 +325,13 @@ spec:
               secretKeyRef:
                 name: {{ template "ds.rabbitmq.secretName" . }}
                 key: {{ .Values.connections.amqpSecretKeyName }}
+          {{- if .Values.connections.amqpUserExistingSecret }}
+          - name: AMQP_USER
+            valueFrom:
+              secretKeyRef:
+                name: {{ tpl .Values.connections.amqpUserExistingSecret $ }}
+                key: {{ .Values.connections.amqpUserSecretKeyName }}
+          {{- end }}
           - name: REDIS_SERVER_PWD
             valueFrom:
               secretKeyRef:

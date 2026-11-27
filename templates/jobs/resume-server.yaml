@@ -1,0 +1,98 @@
+{{- if and .Values.resumeServer.job.enabled (or .Values.upgrade.job.enabled .Values.rollback.job.enabled) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "resume-server") }}
+  namespace: {{ include "ds.namespace" . | quote }}
+  labels:
+    app.kubernetes.io/component: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "resume-server") }}
+    {{- if .Values.commonLabels }}
+    {{- include "ds.labels.commonLabels" . | trim | nindent 4 }}
+    {{- end }}
+  annotations:
+    "helm.sh/hook": post-upgrade,post-rollback
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- if or .Values.commonAnnotations .Values.resumeServer.job.annotations }}
+    {{- $dictValue := default .Values.commonAnnotations .Values.resumeServer.job.annotations }}
+    {{- include "ds.annotations.commonAnnotations" ( dict "keyName" $dictValue "context" $ ) | nindent 4 }}
+    {{- end }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ add .Values.resumeServer.job.deadlineSeconds 60 }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: {{ include "ds.resources.name" (list . .Values.commonNameSuffix "resume-server") }}
+        {{- if .Values.commonLabels }}
+        {{- include "ds.labels.commonLabels" . | trim | nindent 8 }}
+        {{- end }}
+      {{- if .Values.resumeServer.job.podAnnotations }}
+      annotations: {{- include "ds.annotations.commonAnnotations" ( dict "keyName" .Values.resumeServer.job.podAnnotations "context" $ ) | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "ds.serviceAccountName" . }}
+      {{- if .Values.podSecurityContext.enabled }}
+      securityContext: {{- toYaml .Values.podSecurityContext.jobs | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.resumeServer.job.customPodAntiAffinity .Values.resumeServer.job.podAffinity .Values.resumeServer.job.nodeAffinity }}
+      affinity:
+        {{- with .Values.resumeServer.job.customPodAntiAffinity }}
+        podAntiAffinity:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.resumeServer.job.podAffinity }}
+        podAffinity:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.resumeServer.job.nodeAffinity }}
+        nodeAffinity:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      {{- if or .Values.nodeSelector .Values.resumeServer.job.nodeSelector }}
+      nodeSelector: {{ toYaml (default .Values.nodeSelector .Values.resumeServer.job.nodeSelector) | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.tolerations .Values.resumeServer.job.tolerations }}
+      tolerations: {{ toYaml (default .Values.tolerations .Values.resumeServer.job.tolerations) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+      - name: {{ .Values.imagePullSecrets }}
+      {{- end }}
+      volumes:
+        - name: resume-server-scripts
+          configMap:
+            name: {{ template "ds.resumeServer.configMapName" . }}
+            defaultMode: 0755
+      {{- with .Values.resumeServer.job.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: resume-server
+          image: {{ .Values.resumeServer.job.image.repository }}:{{ default .Values.images.tag .Values.resumeServer.job.image.tag }}
+          imagePullPolicy: {{ .Values.resumeServer.job.image.pullPolicy }}
+          {{- if .Values.resumeServer.job.containerSecurityContext.enabled }}
+          securityContext: {{- omit .Values.resumeServer.job.containerSecurityContext "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          resources: {{- toYaml .Values.resumeServer.job.resources | nindent 12 }}
+          env:
+          - name: DEADLINE_SECONDS
+            value: {{ .Values.resumeServer.job.deadlineSeconds | quote }}
+          - name: ATTEMPT_TIMEOUT_SECONDS
+            value: {{ .Values.resumeServer.job.attemptTimeoutSeconds | quote }}
+          - name: GRACE_SECONDS
+            value: {{ .Values.resumeServer.job.graceSeconds | quote }}
+          volumeMounts:
+          - name: resume-server-scripts
+            mountPath: /scripts/{{ .Values.resumeServer.existingConfigmap.keyName }}
+            subPath: {{ .Values.resumeServer.existingConfigmap.keyName }}
+          command: ["/bin/sh", "-c"]
+          {{- if .Values.webProxy.enabled }}
+          args: ["http_proxy={{ .Values.webProxy.http }} https_proxy={{ .Values.webProxy.https }} no_proxy={{ .Values.webProxy.noProxy }} /scripts/{{ .Values.resumeServer.existingConfigmap.keyName }}"]
+          {{- else }}
+          args: ["/scripts/{{ .Values.resumeServer.existingConfigmap.keyName }}"]
+          {{- end }}
+      restartPolicy: Never
+{{- end }}

@@ -52,8 +52,12 @@ This repository contains a set of files to deploy Euro-Office Docs into a Kubern
   * [8. Shutdown Euro-Office Docs (optional)](#8-shutdown-euro-office-docs-optional)
   * [9. Update Euro-Office Docs license (optional)](#9-update-euro-office-docs-license-optional)
   * [10. Euro-Office Docs installation test (optional)](#10-euro-office-docs-installation-test-optional)
-  * [11. Run Jobs in a private k8s cluster (optional)](#11-run-jobs-in-a-private-k8s-cluster-optional)
+  * [11. Database schema and hook Jobs](#11-database-schema-and-hook-jobs)
   * [12. Access to the info page (optional)](#12-access-to-the-info-page-optional)
+  * [13. Deploying with Argo CD / GitOps](#13-deploying-with-argo-cd--gitops)
+    + [13.1 Upgrade lifecycle](#131-upgrade-lifecycle)
+    + [13.2 Helm hooks under Argo CD](#132-helm-hooks-under-argo-cd)
+    + [13.3 Manual recovery](#133-manual-recovery)
 - [Using Grafana to visualize metrics (optional)](#using-grafana-to-visualize-metrics-optional)
   * [1. Deploy Grafana](#1-deploy-grafana)
     + [1.1 Deploy Grafana without installing ready-made dashboards](#11-deploy-grafana-without-installing-ready-made-dashboards)
@@ -360,7 +364,7 @@ $ helm install documentserver euro-office/docs
 
 The command deploys Euro-Office Docs on the Kubernetes cluster in the default configuration. The [Parameters](#4-parameters) section lists the parameters that can be configured during installation.
 
-Note: When installing Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
+Note: The database tables are created by the `pre-install` Job from the SQL schema bundled in the utils image, see the [notes](#11-database-schema-and-hook-jobs) below.
 
 ### 3. Uninstall Euro-Office Docs
 
@@ -370,14 +374,14 @@ To uninstall/delete the `documentserver` deployment:
 $ helm delete documentserver
 ```
 
-Executing the `helm delete` command launches hooks, which perform some preparatory actions before completely deleting the Euro-Office Docs, which include stopping the server, cleaning up the used PVC and database tables.
+Executing the `helm delete` command launches hooks, which perform some preparatory actions before completely deleting the Euro-Office Docs, which include stopping the server and cleaning up the used PVC. Dropping the database tables is performed only if `delete.job.enabled=true`.
 The default hook execution time is 300s. The execution time can be changed using `--timeout [time]`, for example:
 
 ```bash
 $ helm delete documentserver --timeout 25m
 ```
 
-Note: When deleting Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
+Note: The `pre-delete` Job is disabled by default. See the [notes](#11-database-schema-and-hook-jobs) below.
 
 If you want to delete the Euro-Office Docs without any preparatory actions, run the following command:
 
@@ -420,6 +424,8 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `connections.amqpPort`                                      | The port for the connection to AMQP server                                                                                                                                     | `5672`                                                                                    |
 | `connections.amqpVhost`                                     | The virtual host for the connection to AMQP server                                                                                                                             | `/`                                                                                       |
 | `connections.amqpUser`                                      | The username for the AMQP server account                                                                                                                                       | `user`                                                                                    |
+| `connections.amqpUserExistingSecret`                        | The name of existing secret to use for the AMQP server username. If set to, `connections.amqpUser` is ignored and `AMQP_USER` is injected from this secret. Do not also set `AMQP_USER` via `extraEnvVars` (duplicate env names; server-side apply in Argo CD can reject duplicate list keys)| `""`                                                                                      |
+| `connections.amqpUserSecretKeyName`                         | The name of the key that contains the AMQP server username in `connections.amqpUserExistingSecret`                                                                             | `rabbitmq-user`                                                                           |
 | `connections.amqpProto`                                     | The protocol for the connection to AMQP server                                                                                                                                 | `amqp`                                                                                    |
 | `connections.amqpPassword`                                  | AMQP server user password. If set to, it takes priority over the `connections.amqpExistingSecret`                                                                              | `""`                                                                                      |
 | `connections.amqpSecretKeyName`                             | The name of the key that contains the AMQP server user password                                                                                                                | `rabbitmq-password`                                                                       |
@@ -483,10 +489,12 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `customPlugins.defaultPlugins.enabled`                      | Defines whether [plugins](./CUSTOM_RESOURCES.md#disable-all-default-plugins) will be installed on the server and in the `Plugins` menu. It is executed if the `customPlugins.build` is set to `true`                              | `true`                                 |
 | `customPlugins.defaultPlugins.list`                         | Defines [which plugins](./CUSTOM_RESOURCES.md#install-selected-default-plugins-only) from the default list will be installed on the server and in the `Plugins` menu. It is executed if the `customPlugins.build` is set to `true`          | `[]`                         |
 | `customPlugins.emptyPluginsDir`                             | Defines whether a directory with plugins in containers will [contain files](./CUSTOM_RESOURCES.md#completely-disable-plugins-directory), including service files. If set to `true`, an empty volume with the `emptyDir` type will be mapped  | `false`                     |
-| `images.tag`                                                | Global image tag for all Euro-Office Docs services and jobs                                                                                                                     | `9.3.1-1`                                                                                 |
+| `customResources.versionSalt`                               | Arbitrary string included in the `DS_VERSION_HASH` input. Change it in Git after changing the content of the `persistence.customResources` PVC (see [Deploying with Argo CD / GitOps](#13-deploying-with-argo-cd--gitops)). Used only if a `*.build` parameter is `true`| `""`                        |
+| `images.tag`                                                | Global image tag for all Euro-Office Docs services and jobs                                                                                                                     | `v9.3.8`                                                                                  |
 | `docservice.annotations`                                    | Defines annotations that will be additionally added to Docservice Deployment. If set to, it takes priority over the `commonAnnotations`                                        | `{}`                                                                                      |
-| `docservice.podAnnotations`                                 | Map of annotations to add to the Docservice deployment pods                                                                                                                    | `rollme: "{{ randAlphaNum 5 \| quote }}"`                                                 |
+| `docservice.podAnnotations`                                 | Map of annotations to add to the Docservice deployment pods (`checksum/*` annotations are added automatically; a key set here takes priority)                                  | `{}`                                                             |
 | `docservice.replicas`                                       | Docservice replicas quantity. If the `docservice.autoscaling.enabled` parameter is enabled, it is ignored                                                                      | `2`                                                                                       |
+| `docservice.revisionHistoryLimit`                           | The number of old ReplicaSets to retain for the Docservice deployment. If not set, the Kubernetes default (10) is used; `0` is allowed                                         | `null`                                                                                    |
 | `docservice.updateStrategy.type`                            | Docservice deployment update strategy type                                                                                                                                     | `Recreate`                                                                                |
 | `docservice.customPodAntiAffinity`                          | Prohibiting the scheduling of Docservice Pods relative to other Pods containing the specified labels on the same node                                                          | `{}`                                                                                      |
 | `docservice.podAffinity`                                    | Defines [Pod affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity) rules for Docservice Pods scheduling by nodes relative to other Pods | `{}`                                                          |
@@ -545,8 +553,9 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `proxy.livenessProbe.enabled`                               | Enable livenessProbe for Proxy container                                                                                                                                       | `true`                                                                                    |
 | `proxy.startupProbe.enabled`                                | Enable startupProbe for Proxy container                                                                                                                                        | `true`                                                                                    |
 | `converter.annotations`                                     | Defines annotations that will be additionally added to Converter Deployment. If set to, it takes priority over the `commonAnnotations`                                         | `{}`                                                                                      |
-| `converter.podAnnotations`                                  | Map of annotations to add to the Converter deployment pods                                                                                                                     | `rollme: "{{ randAlphaNum 5 \| quote }}"`                                                 |
+| `converter.podAnnotations`                                  | Map of annotations to add to the Converter deployment pods (`checksum/*` annotations are added automatically; a key set here takes priority)                                   | `{}`                                                             |
 | `converter.replicas`                                        | Converter replicas quantity. If the `converter.autoscaling.enabled` parameter is enabled, it is ignored                                                                        | `2`                                                                                       |
+| `converter.revisionHistoryLimit`                            | The number of old ReplicaSets to retain for the Converter deployment. If not set, the Kubernetes default (10) is used; `0` is allowed                                          | `null`                                                                                    |
 | `converter.updateStrategy.type`                             | Converter deployment update strategy type                                                                                                                                      | `Recreate`                                                                                |
 | `converter.customPodAntiAffinity`                           | Prohibiting the scheduling of Converter Pods relative to other Pods containing the specified labels on the same node                                                           | `{}`                                                                                      |
 | `converter.podAffinity`                                     | Defines [Pod affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity) rules for Converter Pods scheduling by nodes relative to other Pods | `{}`                                                           |
@@ -578,7 +587,8 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `converter.autoscaling.behavior`                            | Configuring Converter deployment scaling behavior policies for the `scaleDown` and `scaleUp` fields                                                                            | `{}`                                                                                      |
 | `adminpanel.enabled`                                        | Enables Admin panel installation                                                                                                                                                 | `false`                                                                                 |
 | `adminpanel.annotations`                                    | Defines annotations that will be additionally added to Admin panel Deployment. If set to, it takes priority over the `commonAnnotations`                                         | `{}`                                                                                    |
-| `adminpanel.podAnnotations`                                 | Map of annotations to add to the Admin panel deployment pods                                                                                                                     | `rollme: "{{ randAlphaNum 5 \| quote }}"`                                               |
+| `adminpanel.podAnnotations`                                 | Map of annotations to add to the Admin panel deployment pods (`checksum/*` annotations are added automatically; a key set here takes priority)                                   | `{}`                                                           |
+| `adminpanel.revisionHistoryLimit`                           | The number of old ControllerRevisions to retain for the Admin panel StatefulSet. If not set, the Kubernetes default (10) is used; `0` is allowed                                 | `null`                                                                                  |
 | `adminpanel.updateStrategy.type`                            | Admin panel StatefulSet update strategy type                                                                                                                                     | `RollingUpdate`                                                                         |
 | `adminpanel.customPodAntiAffinity`                          | Prohibiting the scheduling of Admin panel Pods relative to other Pods containing the specified labels on the same node                                                           | `{}`                                                                                    |
 | `adminpanel.podAffinity`                                    | Defines [Pod affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity) rules for Admin panel Pods scheduling by nodes relative to other Pods | `{}`                                                         |
@@ -600,7 +610,8 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `adminpanel.extraVolumeMounts`                              | An array with extra volume mounts for the Admin panel container                                                                                                                  | `[]`                                                                                    |
 | `example.enabled`                                           | Enables the installation of Example                                                                                                                                            | `false`                                                                                   |
 | `example.annotations`                                       | Defines annotations that will be additionally added to Example StatefulSet. If set to, it takes priority over the `commonAnnotations`                                          | `{}`                                                                                      |
-| `example.podAnnotations`                                    | Map of annotations to add to the example pod                                                                                                                                   | `rollme: "{{ randAlphaNum 5 \| quote }}"`                                                 |
+| `example.podAnnotations`                                    | Map of annotations to add to the example pod (`checksum/*` annotations are added automatically; a key set here takes priority)                                                 | `{}`                                                             |
+| `example.revisionHistoryLimit`                              | The number of old ControllerRevisions to retain for the Example StatefulSet. If not set, the Kubernetes default (10) is used; `0` is allowed                                   | `null`                                                                                    |
 | `example.updateStrategy.type`                               | Example StatefulSet update strategy type                                                                                                                                       | `RollingUpdate`                                                                           |
 | `example.customPodAntiAffinity`                             | Prohibiting the scheduling of Example Pod relative to other Pods containing the specified labels on the same node                                                              | `{}`                                                                                      |
 | `example.podAffinity`                                       | Defines [Pod affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity) rules for Example Pod scheduling by nodes relative to other Pods | `{}`                                                              |
@@ -670,8 +681,8 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `webProxy.http`                                             | Web Proxy address for `HTTP` traffic                                                                                                                                           | `http://proxy.example.com`                                                                |
 | `webProxy.https`                                            | Web Proxy address for `HTTPS` traffic                                                                                                                                          | `https://proxy.example.com`                                                               |
 | `webProxy.noProxy`                                          | Patterns for IP addresses or k8s services name or domain names that shouldn’t use the Web Proxy                                                                                | `localhost,127.0.0.1,docservice`                                                          |
-| `privateCluster`                                            | Specify whether the k8s cluster is used in a private network without internet access                                                                                           | `false`                                                                                   |
-| `upgrade.job.enabled`                                       | Enable the execution of job pre-upgrade before upgrading Euro-Office Docs                                                                                                       | `true`                                                                                    |
+| `upgrade.job.enabled`                                       | Enable the execution of job pre-upgrade before upgrading Euro-Office Docs. Resets the tables `doc_changes`, `task_result` and `doc_callbacks` on a version or database change, see [notes](#11-database-schema-and-hook-jobs) | `true`                                                                                     |
+| `upgrade.job.skipWhenUnchanged`                             | Limit stopping the server and resetting the database tables in the pre-upgrade job to a change of the version or the database. It skips them if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version; a tag without a numeric version (`latest`, a digest) disables the check, so the job always runs| `true`                                                                                  |
 | `upgrade.job.annotations`                                   | Defines annotations that will be additionally added to pre-upgrade Job. If set to, it takes priority over the `commonAnnotations`                                              | `{}`                                                                                      |
 | `upgrade.job.podAnnotations`                                | Map of annotations to add to the pre-upgrade Pod                                                                                                                               | `{}`                                                                                      |
 | `upgrade.job.customPodAntiAffinity`                         | Prohibiting the scheduling of pre-upgrade Job Pod relative to other Pods containing the specified labels on the same node                                                      | `{}`                                                                                      |
@@ -686,12 +697,13 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `upgrade.job.containerSecurityContext.enabled`              | Enable security context for the pre-upgrade container                                                                                                                          | `false`                                                                                   |
 | `upgrade.job.resources.requests`                            | The requested resources for the job pre-upgrade container                                                                                                                      | `{}`                                                                                      |
 | `upgrade.job.resources.limits`                              | The resources limits for the job pre-upgrade container                                                                                                                         | `{}`                                                                                      |
-| `upgrade.existingConfigmap.tblRemove.name`                  | The name of the existing ConfigMap that contains the sql file for deleting tables from the database                                                                            | `remove-db-scripts`                                                                       |
+| `upgrade.existingConfigmap.tblRemove.name`                  | The name of the existing ConfigMap that contains the sql file for deleting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `upgrade.existingConfigmap.tblRemove.keyName`               | The name of the sql file containing instructions for deleting tables from the database. Must be the same as the `key` name in `upgrade.existingConfigmap.tblRemove.name`       | `removetbl.sql`                                                                           |
-| `upgrade.existingConfigmap.tblCreate.name`                  | The name of the existing ConfigMap that contains the sql file for craeting tables from the database                                                                            | `init-db-scripts`                                                                         |
+| `upgrade.existingConfigmap.tblCreate.name`                  | The name of the existing ConfigMap that contains the sql file for craeting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `upgrade.existingConfigmap.tblCreate.keyName`               | The name of the sql file containing instructions for creating tables from the database. Must be the same as the `key` name in `upgrade.existingConfigmap.tblCreate.name`       | `createdb.sql`                                                                            |
 | `upgrade.existingConfigmap.dsStop`                          | The name of the existing ConfigMap that contains the Euro-Office Docs upgrade script. If set, the four previous parameters are ignored. Must contain a key `stop.sh`            | `""`                                                                                      |
-| `rollback.job.enabled`                                      | Enable the execution of job pre-rollback before rolling back Euro-Office Docs                                                                                                   | `true`                                                                                    |
+| `rollback.job.enabled`                                      | Enable the execution of job pre-rollback before rolling back Euro-Office Docs. Resets the tables `doc_changes`, `task_result` and `doc_callbacks` on a version or database change, see [notes](#11-database-schema-and-hook-jobs) | `true`                                                                                     |
+| `rollback.job.skipWhenUnchanged`                            | Limit stopping the server and resetting the database tables in the pre-rollback job to a change of the version or the database. It skips them if the image tags and the database connection (type, host, port, name, user) are unchanged and the running server reports the target version; a tag without a numeric version (`latest`, a digest) disables the check, so the job always runs| `true`                                                                                  |
 | `rollback.job.annotations`                                  | Defines annotations that will be additionally added to pre-rollback Job. If set to, it takes priority over the `commonAnnotations`                                             | `{}`                                                                                      |
 | `rollback.job.podAnnotations`                               | Map of annotations to add to the pre-rollback Pod                                                                                                                              | `{}`                                                                                      |
 | `rollback.job.customPodAntiAffinity`                        | Prohibiting the scheduling of pre-rollback Job Pod relative to other Pods containing the specified labels on the same node                                                     | `{}`                                                                                      |
@@ -706,12 +718,12 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `rollback.job.containerSecurityContext.enabled`             | Enable security context for the pre-rollback container                                                                                                                         | `false`                                                                                   |
 | `rollback.job.resources.requests`                           | The requested resources for the job rollback container                                                                                                                         | `{}`                                                                                      |
 | `rollback.job.resources.limits`                             | The resources limits for the job rollback container                                                                                                                            | `{}`                                                                                      |
-| `rollback.existingConfigmap.tblRemove.name`                 | The name of the existing ConfigMap that contains the sql file for deleting tables from the database                                                                            | `remove-db-scripts`                                                                       |
+| `rollback.existingConfigmap.tblRemove.name`                 | The name of the existing ConfigMap that contains the sql file for deleting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `rollback.existingConfigmap.tblRemove.keyName`              | The name of the sql file containing instructions for deleting tables from the database. Must be the same as the `key` name in `rollback.existingConfigmap.tblRemove.name`      | `removetbl.sql`                                                                           |
-| `rollback.existingConfigmap.tblCreate.name`                 | The name of the existing ConfigMap that contains the sql file for craeting tables from the database                                                                            | `init-db-scripts`                                                                         |
+| `rollback.existingConfigmap.tblCreate.name`                 | The name of the existing ConfigMap that contains the sql file for craeting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `rollback.existingConfigmap.tblCreate.keyName`              | The name of the sql file containing instructions for creating tables from the database. Must be the same as the `key` name in `rollback.existingConfigmap.tblCreate.name`      | `createdb.sql`                                                                            |
 | `rollback.existingConfigmap.dsStop`                         | The name of the existing ConfigMap that contains the Euro-Office Docs rollback script. If set, the four previous parameters are ignored. Must contain a key `stop.sh`           | `""`                                                                                      |
-| `delete.job.enabled`                                        | Enable the execution of job pre-delete before deleting Euro-Office Docs                                                                                                         | `true`                                                                                    |
+| `delete.job.enabled`                                        | Enable the execution of job pre-delete before deleting Euro-Office Docs. Drops the tables `doc_changes`, `task_result` and `doc_callbacks`, see [notes](#11-database-schema-and-hook-jobs) | `false`                                                                                   |
 | `delete.job.annotations`                                    | Defines annotations that will be additionally added to pre-delete Job. If set to, it takes priority over the `commonAnnotations`                                               | `{}`                                                                                      |
 | `delete.job.podAnnotations`                                 | Map of annotations to add to the pre-delete Pod                                                                                                                                | `{}`                                                                                      |
 | `delete.job.customPodAntiAffinity`                          | Prohibiting the scheduling of pre-delete Job Pod relative to other Pods containing the specified labels on the same node                                                       | `{}`                                                                                      |
@@ -726,7 +738,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `delete.job.containerSecurityContext.enabled`               | Enable security context for the pre-delete container                                                                                                                           | `false`                                                                                   |
 | `delete.job.resources.requests`                             | The requested resources for the job delete container                                                                                                                           | `{}`                                                                                      |
 | `delete.job.resources.limits`                               | The resources limits for the job delete container                                                                                                                              | `{}`                                                                                      |
-| `delete.existingConfigmap.tblRemove.name`                   | The name of the existing ConfigMap that contains the sql file for deleting tables from the database                                                                            | `remove-db-scripts`                                                                       |
+| `delete.existingConfigmap.tblRemove.name`                   | The name of the existing ConfigMap that contains the sql file for deleting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `delete.existingConfigmap.tblRemove.keyName`                | The name of the sql file containing instructions for deleting tables from the database. Must be the same as the `key` name in `delete.existingConfigmap.tblRemove.name`        | `removetbl.sql`                                                                           |
 | `delete.existingConfigmap.dsStop`                           | The name of the existing ConfigMap that contains the Euro-Office Docs delete script. If set, the two previous parameters are ignored. Must contain a key `stop.sh`              | `""`                                                                                      |
 | `install.job.enabled`                                       | Enable the execution of job pre-install before installing Euro-Office Docs                                                                                                      | `true`                                                                                    |
@@ -744,7 +756,7 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `install.job.containerSecurityContext.enabled`              | Enable security context for the pre-install container                                                                                                                          | `false`                                                                                   |
 | `install.job.resources.requests`                            | The requested resources for the job pre-install container                                                                                                                      | `{}`                                                                                      |
 | `install.job.resources.limits`                              | The resources limits for the job pre-install container                                                                                                                         | `{}`                                                                                      |
-| `install.existingConfigmap.tblCreate.name`                  | The name of the existing ConfigMap that contains the sql file for craeting tables from the database                                                                            | `init-db-scripts`                                                                         |
+| `install.existingConfigmap.tblCreate.name`                  | The name of the existing ConfigMap that contains the sql file for craeting tables from the database. If empty, the file bundled in the utils image is used | `""`                                                                                      |
 | `install.existingConfigmap.tblCreate.keyName`               | The name of the sql file containing instructions for creating tables from the database. Must be the same as the `key` name in `install.existingConfigmap.tblCreate.name`       | `createdb.sql`                                                                            |
 | `install.existingConfigmap.initdb`                          | The name of the existing ConfigMap that contains the initdb script. If set, the two previous parameters are ignored. Must contain a key `initdb.sh`                            | `""`                                                                                      |
 | `clearCache.job.enabled`                                    | Enable the execution of job Clear Cache after upgrading Euro-Office Docs. Job by Clear Cache has a `post-upgrade` hook executes after any resources have been upgraded in Kubernetes. He clears the Cache directory | `true`                                                |
@@ -764,6 +776,26 @@ The `helm delete` command removes all the Kubernetes components associated with 
 | `clearCache.job.resources.limits`                           | The resources limits for the job Clear Cache container                                                                                                                         | `{}`                                                                                      |
 | `clearCache.existingConfigmap.name`                         | The name of the existing ConfigMap that contains the clears the Cache directory custom script. If set, the default configmap will not be created                               | `""`                                                                                      |
 | `clearCache.existingConfigmap.keyName`                      | The name of the script containing instructions for clears the Cache directory. Must be the same as the `key` name in `clearCache.existingConfigmap.name` if a custom script is used       | `clearCache.sh`                                                                |
+| `resumeServer.job.enabled`                                  | Enable the execution of job Resume Server after upgrading or rolling back Euro-Office Docs. It has `post-upgrade` and `post-rollback` hooks and switches the server back on after the `pre-upgrade`/`pre-rollback` jobs switched it off. Rendered only if `upgrade.job.enabled` or `rollback.job.enabled` is `true`| `true`                                                                         |
+| `resumeServer.job.deadlineSeconds`                          | The total time in seconds the job Resume Server tries to switch the server on and to confirm it. `deadlineSeconds` + 60 must stay below the Helm `--timeout` (300s by default); raise both together. The Job (including the image pull) is stopped by Kubernetes after this value + 60s| `210`                                                                          |
+| `resumeServer.job.attemptTimeoutSeconds`                    | The time in seconds to wait for the answer of one DELETE request. The server publishes the new state right after it accepts the request, the answer (at least 30s) is not needed          | `10`                                                                           |
+| `resumeServer.job.graceSeconds`                             | The time in seconds after which the DELETE request is sent again if the server still reports that it is switched off                                                                      | `10`                                                                           |
+| `resumeServer.job.annotations`                              | Defines annotations that will be additionally added to Resume Server Job. If set to, it takes priority over the `commonAnnotations`                                                       | `{}`                                                                           |
+| `resumeServer.job.podAnnotations`                           | Map of annotations to add to the Resume Server Pod                                                                                                                                        | `{}`                                                                           |
+| `resumeServer.job.customPodAntiAffinity`                    | Prohibiting the scheduling of Resume Server Job Pod relative to other Pods containing the specified labels on the same node                                                               | `{}`                                                                           |
+| `resumeServer.job.podAffinity`                              | Defines [Pod affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity) rules for Resume Server Job Pod scheduling by nodes relative to other Pods| `{}`                                                                           |
+| `resumeServer.job.nodeAffinity`                             | Defines [Node affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity) rules for Resume Server Job Pod scheduling by nodes                       | `{}`                                                                           |
+| `resumeServer.job.nodeSelector`                             | Node labels for Resume Server Job Pod assignment. If set to, it takes priority over the `nodeSelector`                                                                                    | `{}`                                                                           |
+| `resumeServer.job.tolerations`                              | Tolerations for Resume Server Job Pod assignment. If set to, it takes priority over the `tolerations`                                                                                     | `[]`                                                                           |
+| `resumeServer.job.initContainers`                           | Defines containers that run before Resume Server container in the Pod                                                                                                                     | `[]`                                                                           |
+| `resumeServer.job.image.repository`                         | Job by Resume Server Euro-Office Docs image repository                                                                                                                                    | `ghcr.io/euro-office/cluster-utils`                                            |
+| `resumeServer.job.image.tag`                                | Job by Resume Server Euro-Office Docs image tag. If set to, it takes priority over the `images.tag`                                                                                       | `""`                                                                           |
+| `resumeServer.job.image.pullPolicy`                         | Job by Resume Server Euro-Office Docs image pull policy                                                                                                                                   | `IfNotPresent`                                                                 |
+| `resumeServer.job.containerSecurityContext.enabled`         | Enable security context for the Resume Server container                                                                                                                                   | `false`                                                                        |
+| `resumeServer.job.resources.requests`                       | The requested resources for the job Resume Server container                                                                                                                               | `{}`                                                                           |
+| `resumeServer.job.resources.limits`                         | The resources limits for the job Resume Server container                                                                                                                                  | `{}`                                                                           |
+| `resumeServer.existingConfigmap.name`                       | The name of the existing ConfigMap that contains the custom script that switches the server back on. If set, the default configmap will not be created                                    | `""`                                                                           |
+| `resumeServer.existingConfigmap.keyName`                    | The name of the script that switches the server back on. Must be the same as the `key` name in `resumeServer.existingConfigmap.name` if a custom script is used                           | `resume.sh`                                                                    |
 | `grafanaDashboard.job.annotations`                          | Defines annotations that will be additionally added to Grafana Dashboard Job. If set to, it takes priority over the `commonAnnotations`                                        | `{}`                                                                                      |
 | `grafanaDashboard.job.podAnnotations`                       | Map of annotations to add to the Grafana Dashboard Pod                                                                                                                         | `{}`                                                                                      |
 | `grafanaDashboard.job.customPodAntiAffinity`                | Prohibiting the scheduling of Grafana Dashboard Job Pod relative to other Pods containing the specified labels on the same node                                                | `{}`                                                                                      |
@@ -1098,14 +1130,16 @@ Or modify the values.yaml file and run the command:
 $ helm upgrade documentserver -f values.yaml euro-office/docs
 ```
 
-Running the helm upgrade command runs a hook that shuts down the Euro-Office Docs and cleans up the database. This is needed when updating the version of Euro-Office Docs. The default hook execution time is 300s.
+The `pre-upgrade` hook (`upgrade.job.enabled=true` by default) shuts down the Euro-Office Docs and recreates the database tables, see the [notes](#11-database-schema-and-hook-jobs) below. If the version of Euro-Office Docs or the database connection changes, the `resume-server` job switches the server back on afterwards. If neither changes, the job detects this and does nothing (see [Upgrade lifecycle](#131-upgrade-lifecycle)). The default hook execution time is 300s.
 The execution time can be changed using --timeout [time], for example
 
 ```bash
 $ helm upgrade documentserver -f values.yaml euro-office/docs --timeout 15m
 ```
 
-Note: When upgrading Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
+  > **Note**: `resumeServer.job.deadlineSeconds` + 60 must stay below the `--timeout` value, see [Upgrade lifecycle](#131-upgrade-lifecycle)
+
+Note: The `pre-upgrade` Job resets the database tables when the version or the database changes. See the [notes](#11-database-schema-and-hook-jobs) below.
 
 If you want to update any parameter other than the version of the Euro-Office Docs, then run the `helm upgrade` command without `hooks`, for example:
 
@@ -1119,7 +1153,7 @@ To rollback updates, run the following command:
 $ helm rollback documentserver
 ```
 
-Note: When rolling back Euro-Office Docs in a private k8s cluster behind a Web proxy or with no internet access, see the [notes](#11-run-jobs-in-a-private-k8s-cluster-optional) below.
+Note: The `pre-rollback` Job resets the database tables when the version or the database changes. See the [notes](#11-database-schema-and-hook-jobs) below.
 
 ### 8. Shutdown Euro-Office Docs (optional)
 
@@ -1205,49 +1239,74 @@ Note: This testing is for informational purposes only and cannot guarantee 100% 
 It may be that even though all checks are completed successfully, an error occurs in the application.
 In this case, more detailed information can be found in the application logs.
 
-### 11. Run Jobs in a private k8s cluster (optional)
+### 11. Database schema and hook Jobs
 
-When running `Job` for installation, update, rollback and deletion, the container being launched needs Internet access to download the latest sql scripts.
-If the access of containers to the external network is prohibited in your k8s cluster, then you can perform these Jobs by setting the `privateCluster=true` parameter and manually create a `ConfigMap` with the necessary sql scripts.
+The SQL scripts used by the `pre-install` Job (`createdb.sql`) and by the optional `pre-upgrade`, `pre-rollback` and `pre-delete` Jobs (`removetbl.sql`, `createdb.sql`) are bundled in the `cluster-utils` image under `/scripts/schema/<dbType>/`. Nothing is downloaded at runtime, so the Jobs work in clusters without Internet access and the schema always matches the image version.
 
-To do this, run the following commands:
+**Requires `cluster-utils` 9.3.8+** (it bundles `/scripts/schema`).
 
-If your cluster already has `remove-db-scripts` and `init-db-scripts` configmaps, then delete them:
+| `connections.dbType`  | Directory in the image        |
+|-----------------------|-------------------------------|
+| `postgres`            | `/scripts/schema/postgresql/` |
+| `mysql`, `mariadb`    | `/scripts/schema/mysql/`      |
+| `mssql`               | `/scripts/schema/mssql/`      |
+| `oracle`              | `/scripts/schema/oracle/`     |
+| `dameng`              | `/scripts/schema/dameng/`     |
 
-```bash
-$ kubectl delete cm remove-db-scripts init-db-scripts
+> **Requirement: utils image**: the `cluster-utils` image used by the Jobs must contain `/scripts/schema/<dbType>/createdb.sql` (and `removetbl.sql` for the `upgrade`, `rollback` and `delete` Jobs).
+
+If the script is not found, the Job fails with a message like the following and nothing is changed in the database:
+
+```
+SQL script /scripts/schema/postgresql/createdb.sql not found
 ```
 
-Download the Euro-Office Docs database scripts for database cleaning and database tables creating:
+Workaround for an image without the schema: provide the scripts yourself with `existingConfigmap.tblCreate` / `existingConfigmap.tblRemove`, see [Using your own SQL scripts](#using-your-own-sql-scripts). The file is mounted as a single file (`subPath`) at `/scripts/<keyName>`, and the Job then uses that path instead of the bundled one.
 
-If PostgreSQL is selected as the database server:
+> **Note**: The `cluster-utils` image contains the clients for PostgreSQL, MySQL/MariaDB, MSSQL and Oracle. It does not contain the Dameng client (`disql`), so the Jobs cannot work with `connections.dbType=dameng` unless you provide a custom image that includes it.
 
-```bash
-$ wget -O removetbl.sql https://raw.githubusercontent.com/Euro-Office/server/master/schema/postgresql/removetbl.sql
-$ wget -O createdb.sql https://raw.githubusercontent.com/Euro-Office/server/master/schema/postgresql/createdb.sql
-```
+#### Using your own SQL scripts
 
-If MySQL is selected as the database server:
+To use your own scripts instead of the bundled ones, create a `ConfigMap` and set its name and the key name for the corresponding Job:
 
 ```bash
-$ wget -O removetbl.sql https://raw.githubusercontent.com/Euro-Office/server/master/schema/mysql/removetbl.sql
-$ wget -O createdb.sql https://raw.githubusercontent.com/Euro-Office/server/master/schema/mysql/createdb.sql
-```
-
-Create a configmap from them:
-
-```bash
-$ kubectl create configmap remove-db-scripts --from-file=./removetbl.sql
 $ kubectl create configmap init-db-scripts --from-file=./createdb.sql
+$ helm install documentserver euro-office/docs \
+  --set install.existingConfigmap.tblCreate.name=init-db-scripts \
+  --set install.existingConfigmap.tblCreate.keyName=createdb.sql
 ```
 
-Note: If you specified a different name for `ConfigMap` and for the file from which it is created, set the appropriate parameters for the corresponding Jobs:
- - `existingConfigmap.tblRemove.name` and `existingConfigmap.tblRemove.keyName` for scripts for database cleaning
- - `existingConfigmap.tblCreate.name` and `existingConfigmap.tblCreate.keyName` for scripts for database tables creating
+The same applies to `upgrade.existingConfigmap.*`, `rollback.existingConfigmap.*` (`tblRemove` and `tblCreate`) and `delete.existingConfigmap.tblRemove`. The file is mounted at `/scripts/<keyName>`.
 
-Next, when executing the commands `helm install|upgrade|rollback|delete`, set the parameter `privateCluster=true`
+#### Jobs that drop tables
 
-  > **Note**: If it is possible to use a Web Proxy in your network to ensure the Pods containers have access to the Internet, then you can leave the parameter `privateCluster=false`, not manually create a configmaps with sql scripts and set the parameter `webProxy.enabled=true`, also setting the appropriate parameters for the Web Proxy.
+The `upgrade.job.enabled` and `rollback.job.enabled` parameters are `true` by default, `delete.job.enabled` is `false`. When a hook runs, it asks the Docservice to stop accepting new connections (`/internal/cluster/inactive`), waits for open documents to be saved and then runs `removetbl.sql`, which **drops the tables `doc_changes`, `task_result` and `doc_callbacks`** (the `upgrade` and `rollback` Jobs then recreate them with `createdb.sql`).
+
+* **Upgrade and rollback** reset the tables only on a version change (or a change of the database connection). With `upgrade.job.skipWhenUnchanged=true` (and `rollback.job.skipWhenUnchanged=true`), a `helm upgrade` that keeps the same image tags and database does not stop the server and does not touch the tables, see the [version gate](#131-upgrade-lifecycle). This reset is how a new schema reaches existing installs, because `pre-install` runs only on a fresh install.
+* **Tags without a numeric version** (`latest`, a digest) disable the gate: the Jobs cannot tell whether the version changed, so they reset the tables on every `helm upgrade` and `helm rollback`. Use a versioned tag.
+* **Delete** is off by default: `helm uninstall` keeps the tables unless you set `delete.job.enabled=true`.
+
+The editor state is kept in the memory of each Docservice Pod. The `inactive` request is sent to all Docservice Pods, but the wait only counts the open documents on the Pod that received it. With more than one Docservice replica, run version upgrades (and rollbacks) in a quiet window with no active editing sessions: otherwise the tables may be dropped while other Pods are still saving. The same applies to `delete.job.enabled=true`.
+
+The `PUT /internal/cluster/inactive` call takes at least 30 seconds, even with no open editors: after sending the shutdown to all Docservice Pods, the server waits a fixed 30 seconds for delivery before it checks for open documents. It returns `false` if documents are still being saved after 30 seconds plus the conversion timeout; the `pre-upgrade` Job then stops, while `pre-rollback` and `pre-delete` continue. Allow for this delay in the `--timeout` of `helm upgrade`, `helm rollback` and `helm uninstall` (default 300s). The Jobs use `backoffLimit: 2`, so a failed attempt is retried and repeats the call.
+
+To drop the tables on `helm uninstall`, set `delete.job.enabled=true` with `helm install` or `helm upgrade` (the uninstall uses the values stored in the release). To switch the upgrade Job off, for example:
+
+```bash
+$ helm upgrade documentserver euro-office/docs --set upgrade.job.enabled=false
+```
+
+#### WOPI keys are deleted on `helm uninstall`
+
+`helm uninstall` (and a replace of the release, which uninstalls and installs again) runs the `wopi-keys-del` hook, which deletes the Secrets `docs-wopi-keys` and `docs-wopi-keys-old` (the names get the `commonNameSuffix`, if set). The next install generates them again, so the automatically generated WOPI keys change. The hook runs only if `wopi.keys.generation` and `wopiKeysDeletion.job.enabled` are `true`; set `wopiKeysDeletion.job.enabled=false` if the Secrets must survive an uninstall.
+
+#### Migration notes
+
+* `privateCluster` and `sqlScripts.branchName` are removed. Remove them from your values files. The Jobs no longer download anything, and the `ConfigMap`s with SQL scripts created for `privateCluster=true` are no longer required. If you still want to use them, set the `existingConfigmap.*.name` parameters explicitly.
+* The defaults of `*.existingConfigmap.tblCreate.name` and `*.existingConfigmap.tblRemove.name` changed from `init-db-scripts`/`remove-db-scripts` to `""`. Set the name explicitly if you rely on those ConfigMaps.
+* `delete.job.enabled` now defaults to `false`, so `helm delete` no longer drops the database tables by default. Set it to `true` if you rely on that. `upgrade.job.enabled` and `rollback.job.enabled` keep their default `true`.
+* `webProxy` is still available for the Jobs that need Internet access to other resources.
+* The `cluster-utils` image tag must be a release that contains `/scripts/schema`. Older images do not, and the Jobs fail.
 
 ### 12. Access to the info page (optional)
 
@@ -1257,6 +1316,76 @@ Taking into consideration the specifics of Kubernetes net interaction it is poss
 Generally the Pods / Nodes / Load Balancer addresses will actually be the clients, so these addresses are to be used.
 In this case the access to the info page will be available to everyone.
 You can further limit the access to the `info` page using Nginx [Basic Authentication](https://nginx.org/en/docs/http/ngx_http_auth_basic_module.html) which you can turn on by setting `proxy.infoAllowedUser` parameter value and by setting the password using `proxy.infoAllowedPassword` parameter, alternatively you can use the existing secret with password by setting its name with `proxy.infoAllowedExistingSecret` parameter.
+
+### 13. Deploying with Argo CD / GitOps
+
+Argo CD renders the chart with `helm template` on every refresh and compares the result with the live state, so the rendered output must be deterministic. Pods are restarted automatically when the Helm-rendered ConfigMaps/Secrets they consume change: the Pod templates carry `checksum/*` annotations computed from them (a key set in `*.podAnnotations` takes priority).
+
+1. Set `jwt.existingSecret`, `proxy.secureLinkExistingSecret` and `proxy.infoAllowedExistingSecret`. Without them the chart-created Secrets fall back to a random value under `helm template` (no `lookup`), so they drift and are rotated on every render. A rotated JWT secret breaks integrations.
+2. The checksums cannot cover Secrets and ConfigMaps that are not rendered by the chart: `connections.*ExistingSecret`, `license.existingSecret`, the WOPI keys Secrets (created by a Job), `extraConf.configMap` and `extraThemes.configMap`. Use [Stakater Reloader](https://github.com/stakater/Reloader) for Secrets rotated outside Git, or versioned ConfigMap names (changed in Git) for ConfigMaps. The chart does not install Reloader.
+3. The chart cannot see the content of the `persistence.customResources` PVC. **After every change of that content** (new, changed or removed fonts, plugins or dictionaries, also a replaced file with the same name) bump `customResources.versionSalt` in Git: the sync runs the `custom-resources` Job (PreSync hook), the changed `DS_VERSION_HASH` rolls the Pods, and browsers fetch the new assets. Without a Git change Argo CD does not sync, so the Job does not run and the hash does not change.
+   If the salt is not bumped, the `custom-resources` Job still rebuilds the buffer PVC on the next sync (if a `*.build` parameter is `true`, it runs on every pre-upgrade), but no rollout follows and the running Pods keep serving the old files. The Pods copy the buffer only when a container starts, so after a later restart of a single Pod the replicas serve different content under the same cache tag (`DS_VERSION_HASH`). The version gate does not skip the `custom-resources` Job.
+
+#### 13.1 Upgrade lifecycle
+
+On `helm upgrade` (and `helm rollback`) the chart runs these jobs around the update of the workloads:
+
+| Step | Hook | What it does |
+|---|---|---|
+| 1 | `pre-upgrade` / `pre-rollback` job | **Version gate**, then, only if the gate does not skip: switches the server off (`PUT /internal/cluster/inactive`, reaches all docservice Pods), checks the database and resets the database tables. `pre-rollback` also empties the cache directory |
+| 2 | the workloads are updated | Pods are replaced if their Pod template changed |
+| 3 | `post-upgrade` / `post-rollback` job `resume-server` | Switches the server back on (`DELETE /internal/cluster/inactive`) and checks the result |
+| 4 | `post-upgrade` job `clear-cache` | Clears the cache directory |
+
+**Why the server must be switched on again.** The switched-off state is a flag in the memory of every docservice process. It is cleared only by `DELETE /internal/cluster/inactive` or by restarting the Pod. Pods are no longer restarted on every upgrade, so the `resume-server` job sends the `DELETE`, then reads the state three times and sends the `DELETE` again only if the server is still switched off after `resumeServer.job.graceSeconds`. The job fails (exit code 1) only if the server answers and is still switched off at `resumeServer.job.deadlineSeconds`. If the server does not answer (for example Pods are still being replaced), it only prints a warning and succeeds: new Pods start switched on.
+
+**Version gate.** The `pre-upgrade` and `pre-rollback` jobs skip the switch-off and the table reset only if all of the following hold:
+- the old and the new docservice image tag are exactly equal (the old tag is read from the live `documentserver` ConfigMap, `STORAGE_SUBDIRECTORY_NAME`);
+- the converter image tag equals the docservice tag;
+- the database type, host, port and name are unchanged, and the database user is unchanged if the old one is known;
+- every one of five `GET /index.html` requests to the docservice Service reports the target version (the numeric part of the tag: `v9.3.7-1` gives `9.3.7`).
+
+Every uncertain case (a missing old value, a tag without a numeric version such as `nightly`, an unreachable server, any difference) runs the full procedure as before. A skipped run changes nothing: the server stays on and the tables are kept.
+
+**Forcing a full reset on purpose.** Run one upgrade (or rollback) with `--set upgrade.job.skipWhenUnchanged=false` (`rollback.job.skipWhenUnchanged=false` for a rollback). Under GitOps set it in Git for one sync and revert it afterwards. With the value `false` the jobs behave as in chart versions before 6.1.0.
+
+**Limitations of the gate.**
+- The old database user can only be compared if `DB_USER` is still in the `documentserver` ConfigMap. If it is not (for example it was moved to a Secret), a change of only the user is not detected.
+- The old converter image is not read from the cluster; the gate compares the rendered converter tag with the docservice tag. If you set a converter tag that is permanently different from the docservice tag, the gate never skips.
+- The gate does not look at other values. A change that needs a table reset without a version or database change needs a forced full run.
+
+**Timing.** Helm waits for each hook for at most `--timeout` (300s by default). The `resume-server` job is stopped by Kubernetes after `resumeServer.job.deadlineSeconds` + 60 seconds (the image pull counts), so `deadlineSeconds` + 60 must stay below the Helm `--timeout`. Raise both together. The `pre-upgrade` job can wait for running document saves for a long time (the server waits up to about 30 minutes), which is longer than the default `--timeout`; use a larger `--timeout` if you have long-running sessions.
+
+#### 13.2 Helm hooks under Argo CD
+
+Argo CD maps Helm hooks to its own hooks ([Helm hooks in the Argo CD documentation](https://argo-cd.readthedocs.io/en/stable/user-guide/helm/#helm-hooks)):
+
+| Helm hook | Argo CD | Chart jobs |
+|---|---|---|
+| `pre-install`, `pre-upgrade` | `PreSync` | `pre-install`, `pre-upgrade`, `custom-resources`, `wopi-keys-gen` |
+| `post-install`, `post-upgrade` | `PostSync` | `resume-server`, `clear-cache`, `dashboard` |
+| `pre-delete` | `PreDelete` | `pre-delete`, `wopi-keys-del` |
+| `pre-rollback`, `post-rollback` | **ignored** | `pre-rollback`, `resume-server` (rollback part) |
+| `helm.sh/hook-weight` | `sync-wave` | |
+
+- Argo CD cannot tell an install from an upgrade: every sync is one operation, so the `pre-install` and the `pre-upgrade` hooks run together on every sync.
+- A rollback in Argo CD is a sync to an older revision. It runs the `PreSync` and `PostSync` hooks, not the `pre-rollback`/`post-rollback` ones. The version gate and `resume-server` work the same way for it.
+- `resume-server` is a `PostSync` hook, so it runs after the workloads are synced. Because the gate skips the switch-off when nothing changes, a sync without a version or database change does not touch the running server.
+- If you define any Argo CD hook annotation yourself, Argo CD ignores all Helm hooks.
+- To skip the jobs for one sync, set `upgrade.job.enabled=false` (the `resume-server` job is then not rendered either, unless `rollback.job.enabled` is `true`).
+
+#### 13.3 Manual recovery
+
+If editors are refused after an upgrade, or the `resume-server` job reported that the server is still switched off, check and clear the state. The state is kept per Pod, and a `DELETE` sent to any Pod is published to all of them:
+
+```bash
+$ for pod in $(kubectl get pods -l app=docservice -o name); do
+    echo "$pod $(kubectl exec $pod -c docservice -- curl -s http://localhost:8000/internal/cluster/inactive)"
+  done
+$ kubectl exec deploy/docservice -c docservice -- curl -s --max-time 10 -X DELETE http://localhost:8000/internal/cluster/inactive
+```
+
+`{"shutdown":true}` means the server is switched off, `{"shutdown":false}` means it is on. Repeat the first command to confirm that every Pod reports `false`. The server publishes the new state as soon as it accepts the `DELETE`, but it answers only after it finished the earlier switch-off, which can take a long time; that is why the command stops waiting after 10 seconds. Do not send the `DELETE` repeatedly. Restarting the docservice Pods also clears the state.
 
 ## Using Grafana to visualize metrics (optional)
 
