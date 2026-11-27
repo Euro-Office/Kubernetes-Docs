@@ -183,8 +183,11 @@ Deployment recreates it.
 
 Points worth knowing:
 
-- Set `terminationGracePeriodSeconds` to something reasonable (e.g. `600`). The
-  default is **7 days**, which stalls every node drain and rolling upgrade.
+- `spec.terminationGracePeriodSeconds` defaults to **7 days**. It is an upper
+  bound: the operator's `preStop` hook waits until quorum queues stay available
+  without this node, then drains it. Lowering the value bounds drain time but can
+  interrupt that check during rolling restarts. Keep the default when using
+  quorum queues.
 - Use an **odd** replica count. Scaling *down* is not supported by the operator.
 - Credentials are generated into a secret named `CLUSTER-default-user`, with keys
   `username` and `password` — not the key names the Docs chart defaults to.
