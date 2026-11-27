@@ -263,17 +263,42 @@ Return true if a service object should be created for ds
 {{- end -}}
 
 {{/*
-Define a branch with sql scripts for ds
+Return the directory with the bundled sql scripts for the configured database type
 */}}
-{{- define "ds.sqlScripts.branchName" -}}
-{{- $appVersion := .Chart.AppVersion -}}
-{{- if semverCompare ">=7.2.0" $appVersion -}}
-    {{- printf "master" -}}
-{{- else if semverCompare ">=7.1.0 <7.2.0" $appVersion -}}
-    {{- printf "v7.1.1.23" -}}
-{{- else -}}
-    {{- printf "%s" .Values.sqlScripts.branchName -}}
+{{- define "ds.sql.dir" -}}
+{{- $dirs := dict "postgres" "postgresql" "mysql" "mysql" "mariadb" "mysql" "mssql" "mssql" "oracle" "oracle" "dameng" "dameng" -}}
+{{- required (printf "Unsupported connections.dbType: %s" .Values.connections.dbType) (get $dirs .Values.connections.dbType) -}}
 {{- end -}}
+
+{{/*
+Return the path of a sql script inside the job container
+Usage: include "ds.sql.path" (list . "createdb" .Values.install.existingConfigmap.tblCreate)
+Uses the file mounted from the existing ConfigMap if its name is set, otherwise the file bundled in the utils image
+*/}}
+{{- define "ds.sql.path" -}}
+{{- $ctx := index . 0 -}}
+{{- $file := index . 1 -}}
+{{- $override := index . 2 -}}
+{{- if $override.name -}}
+    {{- printf "/scripts/%s" $override.keyName -}}
+{{- else -}}
+    {{- printf "/scripts/schema/%s/%s.sql" (include "ds.sql.dir" $ctx) $file -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Shell snippet that checks that the sql scripts exist in the job container and stops the job if one is missing
+Usage: include "ds.sql.check" (list "$REMOVE_SQL" "$CREATE_SQL") | nindent 4
+Takes a list of paths (shell expressions); prints "Using SQL script <path>" for each one found
+*/}}
+{{- define "ds.sql.check" -}}
+for SQL_FILE in{{ range . }} {{ . | quote }}{{ end }}; do
+  if [ ! -f "$SQL_FILE" ]; then
+    echo -e "\e[0;31m SQL script $SQL_FILE not found \e[0m"
+    exit 1
+  fi
+  echo "Using SQL script $SQL_FILE"
+done
 {{- end -}}
 
 {{/*
@@ -302,8 +327,6 @@ Return the configmap name of removing tables for upgrade
 {{- define "ds.upgrade.configmap.tblRemove.name" -}}
 {{- if not (empty .Values.upgrade.existingConfigmap.tblRemove.name) }}
     {{- .Values.upgrade.existingConfigmap.tblRemove.name }}
-{{- else if and .Values.privateCluster (not .Values.upgrade.existingConfigmap.dsStop) (not .Values.upgrade.existingConfigmap.tblRemove.name) }}
-    {{- required "You set privateCluster=true and did not specify an existing secret containing the ds upgrade script. In this case, you must set upgrade.existingConfigmap.tblRemove.name!" .Values.upgrade.existingConfigmap.tblRemove.name }}
 {{- end }}
 {{- end -}}
 
@@ -313,8 +336,6 @@ Return the configmap name of creating tables for upgrade
 {{- define "ds.upgrade.configmap.tblCreate.name" -}}
 {{- if not (empty .Values.upgrade.existingConfigmap.tblCreate.name) }}
     {{- .Values.upgrade.existingConfigmap.tblCreate.name }}
-{{- else if and .Values.privateCluster (not .Values.upgrade.existingConfigmap.dsStop) (not .Values.upgrade.existingConfigmap.tblCreate.name) }}
-    {{- required "You set privateCluster=true and did not specify an existing secret containing the ds upgrade script. In this case, you must set upgrade.existingConfigmap.tblCreate.name!" .Values.upgrade.existingConfigmap.tblCreate.name }}
 {{- end }}
 {{- end -}}
 
@@ -344,8 +365,6 @@ Return the configmap name of removing tables for rollback
 {{- define "ds.rollback.configmap.tblRemove.name" -}}
 {{- if not (empty .Values.rollback.existingConfigmap.tblRemove.name) }}
     {{- .Values.rollback.existingConfigmap.tblRemove.name }}
-{{- else if and .Values.privateCluster (not .Values.rollback.existingConfigmap.dsStop) (not .Values.rollback.existingConfigmap.tblRemove.name) }}
-    {{- required "You set privateCluster=true and did not specify an existing secret containing the ds rollback script. In this case, you must set rollback.existingConfigmap.tblRemove.name!" .Values.rollback.existingConfigmap.tblRemove.name }}
 {{- end }}
 {{- end -}}
 
@@ -355,8 +374,6 @@ Return the configmap name of creating tables for rollback
 {{- define "ds.rollback.configmap.tblCreate.name" -}}
 {{- if not (empty .Values.rollback.existingConfigmap.tblCreate.name) }}
     {{- .Values.rollback.existingConfigmap.tblCreate.name }}
-{{- else if and .Values.privateCluster (not .Values.rollback.existingConfigmap.dsStop) (not .Values.rollback.existingConfigmap.tblCreate.name) }}
-    {{- required "You set privateCluster=true and did not specify an existing secret containing the ds rollback script. In this case, you must set rollback.existingConfigmap.tblCreate.name!" .Values.rollback.existingConfigmap.tblCreate.name }}
 {{- end }}
 {{- end -}}
 
@@ -386,8 +403,6 @@ Return the configmap name of deleting tables for rollback
 {{- define "ds.delete.configmap.tblRemove.name" -}}
 {{- if not (empty .Values.delete.existingConfigmap.tblRemove.name) }}
     {{- .Values.delete.existingConfigmap.tblRemove.name }}
-{{- else if and .Values.privateCluster (not .Values.delete.existingConfigmap.dsStop) (not .Values.delete.existingConfigmap.tblRemove.name) }}
-    {{- required "You set privateCluster=true and did not specify an existing secret containing the ds delete script. In this case, you must set delete.existingConfigmap.tblRemove.name!" .Values.delete.existingConfigmap.tblRemove.name }}
 {{- end }}
 {{- end -}}
 
@@ -417,8 +432,6 @@ Return the configmap name of creating tables for install ds
 {{- define "ds.install.configmap.tblCreate.name" -}}
 {{- if not (empty .Values.install.existingConfigmap.tblCreate.name) }}
     {{- .Values.install.existingConfigmap.tblCreate.name }}
-{{- else if and .Values.privateCluster (not .Values.install.existingConfigmap.initdb) (not .Values.install.existingConfigmap.tblCreate.name) }}
-    {{- required "You set privateCluster=true and did not specify an existing secret containing the initdb script. In this case, you must set install.existingConfigmap.tblCreate.name!" .Values.install.existingConfigmap.tblCreate.name }}
 {{- end }}
 {{- end -}}
 
@@ -438,6 +451,26 @@ Return true if a configmap object containing the ds clearCache script should be 
 */}}
 {{- define "ds.clearCache.createConfigMap" -}}
 {{- if empty .Values.clearCache.existingConfigmap.name }}
+    {{- true -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Get the configmap name containing the ds resumeServer script
+*/}}
+{{- define "ds.resumeServer.configMapName" -}}
+{{- if .Values.resumeServer.existingConfigmap.name -}}
+    {{- printf "%s" (tpl .Values.resumeServer.existingConfigmap.name $) -}}
+{{- else }}
+    {{- printf "%s" (include "ds.resources.name" (list . .Values.commonNameSuffix "resume-server")) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Return true if a configmap object containing the ds resumeServer script should be created
+*/}}
+{{- define "ds.resumeServer.createConfigMap" -}}
+{{- if empty .Values.resumeServer.existingConfigmap.name }}
     {{- true -}}
 {{- end -}}
 {{- end -}}
@@ -640,15 +673,149 @@ Get the Secret value
 {{- $existValue := index . 1 -}}
 {{- $getSecretName := index . 2 -}}
 {{- $getSecretKey := index . 3 -}}
+{{- $length := 16 -}}
+{{- if ge (len .) 5 -}}
+    {{- $length = index . 4 -}}
+{{- end -}}
 {{- if not $existValue }}
     {{- $secret_lookup := (lookup "v1" "Secret" $context.Release.Namespace $getSecretName).data }}
     {{- $getSecretValue := (get $secret_lookup $getSecretKey) | b64dec }}
     {{- if $getSecretValue -}}
         {{- printf "%s" $getSecretValue -}}
     {{- else -}}
-        {{- printf "%s" (randAlpha 16) -}}
+        {{- printf "%s" (randAlpha $length) -}}
     {{- end -}}
 {{- else -}}
     {{- printf "%s" $existValue -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+Concatenate the rendered output of the given chart templates.
+Usage: include "ds.checksum.templates" (list . "configmaps/documentserver.yaml" ...)
+*/}}
+{{- define "ds.checksum.templates" -}}
+{{- $context := first . -}}
+{{- range rest . -}}
+{{- include (print $context.Template.BasePath "/" .) $context -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Deterministic inputs of the Secrets that use ds.secrets.lookup (their rendered output is random
+under `helm template`, so the input values are used instead). Empty if the Secret is not created by the chart
+*/}}
+{{- define "ds.checksum.jwtInput" -}}
+{{- if eq (include "ds.jwt.createSecret" .) "true" -}}
+{{- toJson .Values.jwt -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "ds.checksum.secureLinkInput" -}}
+{{- if eq (include "ds.secureLinkSecret.createSecret" .) "true" -}}
+{{- .Values.proxy.secureLinkSecret -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "ds.checksum.infoAuthInput" -}}
+{{- if eq (include "ds.info.createSecret" .) "true" -}}
+{{- .Values.proxy.infoAllowedPassword -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Render checksum annotations for the pod template. Entries with empty input are skipped.
+A key that is also set in the user podAnnotations is skipped, so the user value wins and no duplicate key is rendered.
+Usage: include "ds.annotations.checksums" (dict "podAnnotations" .Values.docservice.podAnnotations "checksums" (dict "checksum/config" "<input>"))
+*/}}
+{{- define "ds.annotations.checksums" -}}
+{{- $user := default dict .podAnnotations -}}
+{{- range $key, $input := .checksums }}
+{{- if and $input (not (hasKey $user $key)) }}
+{{ $key }}: {{ $input | sha256sum }}
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/*
+Version gate for the pre-upgrade and pre-rollback jobs.
+The numeric version of the target docservice tag: a leading "v" is stripped and the numeric prefix is taken, optionally
+followed by a "-<suffix>" (v9.3.7-1 and 9.3.7-rc.1 give 9.3.7). Empty for tags without a numeric version (nightly, latest).
+*/}}
+{{- define "ds.versionGate.version" -}}
+{{- $tag := default .Values.images.tag .Values.docservice.image.tag | toString | trimPrefix "v" -}}
+{{- $num := regexFind "^[0-9]+(\\.[0-9]+)+" $tag -}}
+{{- $rest := trimPrefix $num $tag -}}
+{{- if and $num (or (eq $rest "") (hasPrefix "-" $rest)) -}}
+{{- $num -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Environment of the version gate. OLD_* values are those of the release that is running now: the `documentserver`
+ConfigMap is not a hook, so it still has the old values while the pre-upgrade/pre-rollback hooks run.
+The TARGET_DB_* values use the same expressions as the `documentserver` ConfigMap.
+*/}}
+{{- define "ds.versionGate.env" -}}
+{{- $cm := include "ds.resources.name" (list . .Values.commonNameSuffix "documentserver") -}}
+- name: TARGET_TAG
+  value: {{ default .Values.images.tag .Values.docservice.image.tag | quote }}
+- name: CONVERTER_TAG
+  value: {{ default .Values.images.tag .Values.converter.image.tag | quote }}
+- name: TARGET_VERSION
+  value: {{ include "ds.versionGate.version" . | quote }}
+- name: OLD_TAG
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cm }}
+      key: STORAGE_SUBDIRECTORY_NAME
+      optional: true
+- name: TARGET_DB_TYPE
+  value: {{ include "ds.db.type" . | quote }}
+- name: TARGET_DB_HOST
+  value: {{ .Values.connections.dbHost | quote }}
+- name: TARGET_DB_PORT
+  value: {{ .Values.connections.dbPort | quote }}
+- name: TARGET_DB_NAME
+  value: {{ .Values.connections.dbName | quote }}
+- name: TARGET_DB_USER
+  value: {{ .Values.connections.dbUser | quote }}
+{{- range $key := list "DB_TYPE" "DB_HOST" "DB_PORT" "DB_NAME" "DB_USER" }}
+- name: OLD_{{ $key }}
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cm }}
+      key: {{ $key }}
+      optional: true
+{{- end }}
+{{- end -}}
+
+{{/*
+Version gate script. Exits 0 (nothing to do) only if the old and the target docservice tags are equal, the converter tag
+is the target tag, the database connection (type, host, port, name and, if known, user) is unchanged, and all samples of
+/index.html (the Service balances them over the docservice Pods) report the target version. In every other case,
+including an unreachable server or a missing old value, the script continues with the full procedure.
+*/}}
+{{- define "ds.versionGate.script" -}}
+# Version gate: nothing to stop or reset if the version and the database do not change
+version_unchanged() {
+  [ -n "${TARGET_VERSION}" ] && [ -n "${OLD_TAG}" ] && [ "${OLD_TAG}" = "${TARGET_TAG}" ] && [ "${CONVERTER_TAG}" = "${TARGET_TAG}" ] || return 1
+  [ -n "${OLD_DB_TYPE}" ] && [ "${OLD_DB_TYPE}" = "${TARGET_DB_TYPE}" ] || return 1
+  [ -n "${OLD_DB_HOST}" ] && [ "${OLD_DB_HOST}" = "${TARGET_DB_HOST}" ] || return 1
+  [ -n "${OLD_DB_PORT}" ] && [ "${OLD_DB_PORT}" = "${TARGET_DB_PORT}" ] || return 1
+  [ -n "${OLD_DB_NAME}" ] && [ "${OLD_DB_NAME}" = "${TARGET_DB_NAME}" ] || return 1
+  [ -z "${OLD_DB_USER}" ] || [ "${OLD_DB_USER}" = "${TARGET_DB_USER}" ] || return 1
+  local page
+  for _ in 1 2 3 4 5; do
+    page="$(curl -sf --connect-timeout 3 --max-time 5 http://{{ include "ds.resources.name" (list . .Values.commonNameSuffix "docservice") }}:8000/index.html)" || return 1
+    case "${page}" in
+      *"Version: ${TARGET_VERSION}. Build:"*) ;;
+      *) return 1 ;;
+    esac
+  done
+}
+if version_unchanged; then
+  echo -e "\e[0;32m The version ${TARGET_VERSION} and the database are unchanged, the server is not stopped and the tables are not reset \e[0m"
+  exit 0
+fi
 {{- end -}}
