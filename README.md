@@ -296,9 +296,9 @@ creates the secret) or from an existing secret. `*ExistingSecret` names the secr
 `redis-password`, `rabbitmq-password`). Both must match what you created:
 
 ```
-$ kubectl create secret generic ds-db    --from-literal=password='DB_PASSWORD'
-$ kubectl create secret generic ds-redis --from-literal=password='REDIS_PASSWORD'
-$ kubectl create secret generic ds-amqp  --from-literal=password='AMQP_PASSWORD'
+$ kubectl create secret generic ds-db    -n <DOCS_NAMESPACE> --from-literal=password='DB_PASSWORD'
+$ kubectl create secret generic ds-redis -n <DOCS_NAMESPACE> --from-literal=password='REDIS_PASSWORD'
+$ kubectl create secret generic ds-amqp  -n <DOCS_NAMESPACE> --from-literal=password='AMQP_PASSWORD'
 ```
 
 ```yaml
@@ -339,7 +339,7 @@ name — `SERVICE.NAMESPACE.svc.cluster.local`. Secrets are **not** shared acros
 namespaces, so copy the value into a secret in the Docs namespace:
 
 ```
-$ kubectl create secret generic ds-amqp \
+$ kubectl create secret generic ds-amqp -n <DOCS_NAMESPACE> \
   --from-literal=password="$(kubectl get secret SOURCE_SECRET -n OTHER_NS \
       -o jsonpath='{.data.password}' | base64 -d)"
 ```
