@@ -348,33 +348,8 @@ $ kubectl create secret generic ds-amqp -n <DOCS_NAMESPACE> \
 
 #### Managed Redis and TLS
 
-Many managed Redis-compatible services (including Valkey-based ones) require TLS,
-and some block administrative commands such as `CONFIG`. The chart exposes no TLS
-switch, so the option goes in a `local.json` supplied through
-[extraConf](#7-make-changes-to-node-config-configuration-files):
-
-```json
-{
-  "services": {
-    "CoAuthoring": {
-      "redis": {
-        "options": {
-          "socket": { "tls": true }
-        }
-      }
-    }
-  }
-}
-```
-
-The exact key depends on the connector: `redisConnectorName: redis` (node_redis)
-uses `socket.tls`, while `ioredis` expects `tls` at the root of `options`. Verify
-against the `default.json` shipped in the image:
-
-```
-$ docker run --rm --entrypoint cat ghcr.io/euro-office/cluster-docs:TAG \
-  /etc/euro-office/documentserver/default.json
-```
+Many managed Redis-compatible services (including Valkey-based ones) require TLS.
+The chart exposes no TLS switch.
 
 #### Verify connectivity before installing
 
